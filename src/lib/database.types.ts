@@ -104,7 +104,16 @@ export interface MemberRow {
  * Phase 2 — Case / PR / Workflow / Queue / Approval / SLA
  * ------------------------------------------------------------------ */
 
-export type CaseStatus = "draft" | "submitted" | "approval" | "approved" | "rejected" | "returned" | "cancelled";
+export type CaseStatus =
+  | "draft"
+  | "submitted"
+  | "approval"
+  | "approved"
+  | "rejected"
+  | "returned"
+  | "cancelled"
+  | "procurement"
+  | "awarded";
 export type PRStatus = "draft" | "submitted" | "approved" | "rejected" | "returned" | "cancelled";
 export type Priority = "low" | "normal" | "high" | "urgent";
 export type ApprovalDecision = "pending" | "approved" | "rejected" | "returned";
@@ -224,5 +233,111 @@ export interface MyWorkItem {
   priority: Priority;
   role_name: string;
   due_at: string | null;
+  created_at: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Phase 3a — Procurement: Supplier / RFQ / Quotation / Evaluation / PO
+ * ------------------------------------------------------------------ */
+
+export type RfqStatus = "open" | "closed" | "cancelled";
+export type POStatus = "issued" | "cancelled";
+
+export interface Supplier {
+  id: string;
+  tenant_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  category_id: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Rfq {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  title: string;
+  items: PRItem[];
+  closing_date: string | null;
+  status: RfqStatus;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface Quotation {
+  id: string;
+  tenant_id: string;
+  rfq_id: string;
+  supplier_id: string;
+  total_cents: number;
+  currency: string;
+  notes: string | null;
+  submitted_at: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface Evaluation {
+  id: string;
+  tenant_id: string;
+  rfq_id: string;
+  selected_quotation_id: string;
+  notes: string | null;
+  decided_by: string | null;
+  decided_at: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  rfq_id: string | null;
+  supplier_id: string;
+  po_number: string;
+  items: PRItem[];
+  total_cents: number;
+  currency: string;
+  status: POStatus;
+  issued_by: string | null;
+  issued_at: string;
+  created_at: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Phase 3b — Legal / Contract Provisioning (v1 cut)
+ * ------------------------------------------------------------------ */
+
+export type ContractStatus = "draft" | "sent" | "signed" | "void";
+export type ContractPartyRole = "client_signer" | "tenant_signer" | "witness";
+export type ContractPartyStatus = "pending" | "signed";
+
+export interface Contract {
+  id: string;
+  tenant_id: string;
+  case_id: string | null;
+  client_id: string | null;
+  contract_type: string;
+  title: string;
+  body: string;
+  requires_witness: boolean;
+  status: ContractStatus;
+  voided_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  sent_at: string | null;
+  signed_at: string | null;
+}
+
+export interface ContractParty {
+  id: string;
+  tenant_id: string;
+  contract_id: string;
+  party_role: ContractPartyRole;
+  name: string;
+  email: string | null;
+  status: ContractPartyStatus;
+  signed_at: string | null;
   created_at: string;
 }

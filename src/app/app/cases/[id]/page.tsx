@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
-import { requireSession } from "@/lib/data/session";
+import { requireSession, can } from "@/lib/data/session";
 import { getCaseDetail } from "@/lib/data/cases";
+import { getProcurementDetail, getSuppliers } from "@/lib/data/procurement";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkflowStepper } from "@/components/app/workflow-stepper";
 import { formatDate, formatMoney, slaStatus } from "@/lib/utils";
 import { ApprovalPanel } from "./approval-panel";
 import { SubmitButton } from "./submit-button";
+import { StartProcurementButton } from "./start-procurement-button";
+import { ProcurementPanel } from "./procurement-panel";
 
 const STATUS_TONE = {
   draft: "neutral",
@@ -16,6 +19,8 @@ const STATUS_TONE = {
   rejected: "critical",
   returned: "attention",
   cancelled: "neutral",
+  procurement: "info",
+  awarded: "good",
 } as const;
 
 const TERMINAL_LABEL: Record<string, string> = {
@@ -37,6 +42,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const canSubmit = pr.status === "draft" && pr.requester_id === session.user.id;
   const sla = pendingApproval ? slaStatus(pendingTaskDueAt) : null;
 
+  const showStartProcurement = c.status === "approved" && can(session, "procurement.rfq.create");
+  const inProcurement = c.status === "procurement" || c.status === "awarded";
+  const procurementDetail = inProcurement ? await getProcurementDetail(session.tenant.id, c.id) : null;
+  const suppliers = inProcurement ? await getSuppliers(session.tenant.id) : [];
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -50,6 +60,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
         {canSubmit && <SubmitButton caseId={c.id} prId={pr.id} />}
+        {showStartProcurement && <StartProcurementButton caseId={c.id} />}
       </div>
 
       <Card>
@@ -145,6 +156,15 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             ))}
           </CardBody>
         </Card>
+      )}
+
+      {procurementDetail && (
+        <ProcurementPanel
+          detail={procurementDetail}
+          suppliers={suppliers}
+          canInvite={can(session, "procurement.rfq.send")}
+          canAward={can(session, "procurement.po.issue")}
+        />
       )}
 
       {sla && sla.status !== "none" && (
