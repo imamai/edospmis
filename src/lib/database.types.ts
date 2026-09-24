@@ -99,3 +99,130 @@ export interface MemberRow {
   status: MembershipStatus;
   roles: { id: string; name: string }[];
 }
+
+/* ------------------------------------------------------------------ *
+ * Phase 2 — Case / PR / Workflow / Queue / Approval / SLA
+ * ------------------------------------------------------------------ */
+
+export type CaseStatus = "draft" | "submitted" | "approval" | "approved" | "rejected" | "returned" | "cancelled";
+export type PRStatus = "draft" | "submitted" | "approved" | "rejected" | "returned" | "cancelled";
+export type Priority = "low" | "normal" | "high" | "urgent";
+export type ApprovalDecision = "pending" | "approved" | "rejected" | "returned";
+
+export interface Category {
+  id: string;
+  tenant_id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Client {
+  id: string;
+  tenant_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PRItem {
+  description: string;
+  qty: number;
+  unit: string;
+  estimated_unit_cost_cents: number;
+}
+
+export interface Case {
+  id: string;
+  tenant_id: string;
+  case_number: string;
+  client_id: string | null;
+  department_id: string | null;
+  status: CaseStatus;
+  current_stage_key: string;
+  workflow_version_id: string | null;
+  priority: Priority;
+  created_by: string | null;
+  opened_at: string;
+  closed_at: string | null;
+}
+
+export interface PR {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  requester_id: string;
+  category_id: string | null;
+  client_id: string | null;
+  department_id: string | null;
+  title: string;
+  justification: string | null;
+  items: PRItem[];
+  estimated_cost_cents: number;
+  currency: string;
+  required_by: string | null;
+  priority: Priority;
+  status: PRStatus;
+  created_at: string;
+}
+
+export interface WorkflowStageDef {
+  key: string;
+  label: string;
+}
+
+export interface WorkflowVersion {
+  id: string;
+  workflow_id: string;
+  version_number: number;
+  definition: { stages: WorkflowStageDef[] };
+  created_at: string;
+}
+
+export interface ApprovalRule {
+  id: string;
+  tenant_id: string;
+  name: string;
+  min_amount_cents: number | null;
+  max_amount_cents: number | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ApprovalStep {
+  id: string;
+  rule_id: string;
+  step_order: number;
+  role_id: string;
+}
+
+export interface Approval {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  rule_id: string;
+  step_order: number;
+  role_id: string;
+  status: ApprovalDecision;
+  comment: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  workflow_version_id: string | null;
+  created_at: string;
+}
+
+/** A pending approval task, shaped for the My Work list. */
+export interface MyWorkItem {
+  approval_id: string;
+  case_id: string;
+  case_number: string;
+  pr_title: string;
+  estimated_cost_cents: number;
+  currency: string;
+  priority: Priority;
+  role_name: string;
+  due_at: string | null;
+  created_at: string;
+}

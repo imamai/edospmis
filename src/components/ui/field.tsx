@@ -45,6 +45,48 @@ export function Field({
   );
 }
 
+export function NumberInput({
+  label,
+  hint,
+  error,
+  required,
+  unit,
+  className,
+  id,
+  decimals = false,
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
+  label: string;
+  hint?: string;
+  error?: string | null;
+  unit?: string;
+  decimals?: boolean;
+}) {
+  const auto = useId();
+  const fieldId = id ?? auto;
+  return (
+    <Field label={label} hint={hint} error={error} required={required} htmlFor={fieldId} className={className}>
+      <div className="relative">
+        <input
+          id={fieldId}
+          type="number"
+          inputMode={decimals ? "decimal" : "numeric"}
+          step={decimals ? "0.01" : "1"}
+          required={required}
+          aria-invalid={error ? true : undefined}
+          className={cn(CONTROL, "h-11 tnum", unit && "pr-14", error && "border-critical")}
+          {...props}
+        />
+        {unit && (
+          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-ink-faint">
+            {unit}
+          </span>
+        )}
+      </div>
+    </Field>
+  );
+}
+
 export function TextInput({
   label,
   hint,
