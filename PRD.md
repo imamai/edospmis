@@ -93,7 +93,8 @@ supplier spreadsheet there, WhatsApp for status updates). The result:
 | **Receiving/Warehouse Officer** | Receives and logs goods | Fast GRN entry against a PO, partial/short/damaged handling |
 | **Quality/Inspection Officer** | Verifies goods/services meet spec | Simple accept/reject/partial workflow with evidence capture |
 | **Delivery Officer** | Executes final delivery/service to the client | Scheduling, dispatch, proof-of-delivery capture |
-| **Client** | The person/org the request is ultimately for | Status transparency, minimal friction, confirm receipt |
+| **Lawyer / Advocate** | Drafts and provisions contracts to clients (retainers, service agreements, NDAs, framework agreements) and tracks execution | A branded, correctly-worded document out the door fast; certainty about who has signed and who hasn't; visibility that isn't boxed into one department — legal counsel advises across the whole tenant, not one branch's cases |
+| **Client** | The person/org the request is ultimately for | Status transparency, minimal friction, confirm receipt, sign what's sent to them |
 | **Tenant Administrator** | Configures the org's entire process | Full control without needing engineering help |
 | **Executive/Auditor** | Oversight | Dashboards, spend visibility, full audit trail, no edit rights needed |
 | **Platform Super Admin** | EDOS Centre itself, operating the SaaS | Tenant provisioning, platform health, never sees tenant business data unless invited for support |
@@ -142,6 +143,22 @@ confirmation" (delivery arrived, needs sign-off) and one "In procurement —
 supplier quotations under review, expected 3 more days." Client uploads a
 missing specification document requested by procurement. No internal
 approval chain, supplier names or margin data is visible to the client.
+
+**J6 — Contract provisioning by counsel**
+A Lawyer/Advocate drafts a service agreement for a client from the
+tenant's "Service Agreement" template, merging in the client's details
+and the engagement terms → sends it for one internal reviewer's sign-off
+→ sends it to the client through a secure link (the client need not have
+a portal login) → client opens it, ticks "I agree to sign
+electronically," signs → because this contract type is flagged
+`requires_witness`, a named witness is prompted next, in the order set on
+the contract, and attests after the client, not before → the contract
+moves to Signed, an executed PDF (carrying the tenant's own branding,
+letterhead and the signature/witness block) is generated and hashed →
+status advances to Active on its effective date → the Lawyer/Advocate
+gets a reminder 30 days ahead of `expiry_date`. Throughout, every send,
+view, sign and reminder is on the contract's own client-visible timeline,
+separate from the tenant's internal audit log.
 
 ## 8. Functional Requirements (by module)
 
@@ -257,28 +274,71 @@ section states the requirement, not the implementation.
 - FR‑34 (P0): Create/view requests, view status and (non-internal) history,
   upload documents, respond to queries, confirm delivery/service.
 
-### 8.13 Administration
+### 8.13 Legal / Contract Provisioning
+- FR‑40 (P1): A Lawyer/Advocate can draft a contract from a tenant-defined
+  template (service agreement, NDA, retainer, framework agreement, or
+  tenant-custom type) with merge fields for client/case/engagement data, or
+  start from a blank draft. Every draft-to-signed edit is a new version —
+  never an in-place overwrite of a version already sent or signed.
+- FR‑41 (P1): A contract may stand alone (e.g. an annual retainer) or be
+  linked to a Case, where it can be configured as one of that Case's
+  closure conditions (PRD §28) — delivery/service cannot be marked complete
+  until the linked contract is signed, if the tenant configures it that way.
+- FR‑42 (P1): Contracts render as a PDF carrying the issuing tenant's own
+  branding (logo, letterhead, brand color) from `edospmis_tenants.branding`
+  — two tenants' contracts must not look alike, since each is a distinct
+  legal entity's own paper, not a platform-branded template.
+- FR‑43 (P1): Send-to-sign via a secure, single-use link — the signer (a
+  client contact or a witness) is not required to hold a platform account
+  to view or sign. Before signing, the signer must affirmatively consent to
+  sign electronically (a distinct step, not assumed by the act of signing).
+- FR‑44 (P1): Optional witness step, set per contract via a
+  tenant/lawyer-controlled `requires_witness` flag (never assumed globally
+  — jurisdictions and contract types differ on whether one is required).
+  Signing order across client signer, tenant countersigner and witness is
+  configurable per contract, and a witness cannot attest ahead of the party
+  they are witnessing.
+- FR‑45 (P1): Every send, view, sign, decline, reminder and void is
+  recorded on a contract-specific, client-visible timeline distinct from
+  the tenant-internal audit log — a signer can see "sent Tuesday, viewed
+  Wednesday" the way a real e-signature product shows it.
+- FR‑46 (P1): The final signed PDF is hashed at execution so it can later
+  be verified byte-for-byte against what was actually signed; a
+  Certificate of Completion (who signed, when, from where) is exportable
+  alongside it.
+- FR‑47 (P2): Expiry/renewal reminders ahead of `expiry_date`, via the same
+  notification engine as SLA warnings.
+
+  **Explicit legal caveat**, consistent with PRD Non-Goal NG3: EDOSPMIS
+  does not determine, and does not advise, which contract types legally
+  require a witnessed or notarized signature in a given jurisdiction — that
+  judgment belongs to the tenant's own counsel, expressed through the
+  `requires_witness` flag and the contract type/template they choose. The
+  platform enforces whatever they configure; it does not certify legal
+  sufficiency.
+
+### 8.14 Administration
 - FR‑35 (P0): Tenant admin self-service configuration of org structure,
   roles/permissions, approval rules, workflows, queues, SLAs, escalation,
   categories, cost centres, numbering, branding, notification templates —
   every change audited.
 
-### 8.14 Notifications
+### 8.15 Notifications
 - FR‑36 (P0): In-app + email; SMS as a configurable channel per
   notification type; templates tenant-editable.
 
-### 8.15 Audit
+### 8.16 Audit
 - FR‑37 (P0): Every significant state change, approval, configuration
   change and financial action is recorded with who/what/when/before/after
   (and why, where a reason is captured). Audit records are append-only from
   the application's perspective.
 
-### 8.16 Reporting/Analytics
+### 8.17 Reporting/Analytics
 - FR‑38 (P1): PR aging, procurement cycle time, approval time, queue wait
   time, SLA compliance/breach, supplier performance, department spend,
   bottleneck views.
 
-### 8.17 AI (forward-looking, not committed to early phases)
+### 8.18 AI (forward-looking, not committed to early phases)
 - FR‑39 (P2): PR classification, spec/document extraction, supplier
   matching, duplicate detection, SLA-breach prediction — always explainable,
   reviewable, and never auto-deciding on money without human approval.
@@ -332,6 +392,22 @@ even if U supplies or guesses an ID belonging to Tenant B —
 enforced by database row-level security, not only by the API query.
 ```
 
+**Witnessed Contract Signing**
+```
+Given a contract flagged requires_witness = true,
+And a signing order of client_signer, then witness,
+When the witness opens their secure signing link,
+Then they are shown "Waiting on the client's signature first" and cannot
+sign until the client_signer party's status = signed.
+When the client signs (after affirmatively consenting to sign
+electronically),
+Then the witness is notified their step is now open.
+The executed PDF is only generated, hashed, and the contract marked
+Signed once every required party (client signer, tenant countersigner if
+configured, witness if required) has signed — a partial set of
+signatures never produces an executed document.
+```
+
 ## 11. Risk Register
 
 | Risk | Prob. | Impact | Mitigation | Owner |
@@ -341,6 +417,7 @@ enforced by database row-level security, not only by the API query.
 | SLA/escalation timing bugs (timezone/holiday-calendar edge cases) | Med | Med | Dedicated SLA calculation unit tests against fixed calendars before Phase 2 sign-off | Engineering |
 | Three-way matching false positives erode trust | Med | Med | Configurable tolerance thresholds per tenant (e.g. ±2% quantity/price variance) before flagging | Product |
 | Solo/small engineering team over-builds workflow engine (Camunda/Temporal complexity) before it's justified | Med | High | Explicit build-vs-buy decision in `ARCHITECTURE.md` §9 defers Temporal until case volume justifies it | Engineering |
+| A tenant (or EDOS Centre itself) relies on the platform's electronic signature as legally equivalent to a wet/notarized one where local law demands more | Med | High | Explicit legal caveat in §8.13 — the platform enforces `requires_witness` and signing order but never certifies legal sufficiency; tenant's own counsel decides per contract type | Product |
 | Mobile approval UX treated as afterthought | Low | High | Mobile is a P0 acceptance criterion on every approval-related feature, not a follow-up pass | Product |
 | Segregation-of-duties rules block legitimate small-team tenants (one person wears many hats) | Med | Med | SoD rules are opt-in per tenant, off by default for small tenants, on by default for larger ones | Product |
 
@@ -348,7 +425,9 @@ enforced by database row-level security, not only by the API query.
 
 Phase 0 (this document + ARCHITECTURE.md) → Phase 1 Platform Foundation →
 Phase 2 Case+PR+Workflow+Queue+Approval+SLA (MVP) → Phase 3 Procurement
-(RFQ/Supplier/PO) → Phase 4 Fulfilment (Receiving/GRN/Inspection/Delivery/
+(RFQ/Supplier/PO) **+ Legal/Contract Provisioning** (both are "produce a
+document an external party has to agree to and sign," so they ship
+together) → Phase 4 Fulfilment (Receiving/GRN/Inspection/Delivery/
 Closure) → Phase 5 Finance+Advanced Controls (3-way match, SoD, delegation)
 → Phase 6 Analytics → Phase 7 Integrations → Phase 8 Mobile polish + AI.
 

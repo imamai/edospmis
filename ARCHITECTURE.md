@@ -30,9 +30,12 @@ Tenant
      └─ GRN ─ GRNItem ─ Inspection
      └─ Invoice ─ InvoiceItem ─ MatchException
      └─ Delivery / Service
+     └─ Contract ─ ContractVersion ─ ContractParty ─ ContractEvent (Case-linked, optional)
      └─ Document (polymorphic, attached to any of the above)
      └─ Notification (references the Case)
      └─ AuditLog (references the Case + any sub-entity)
+ └─ Contract ─ ContractTemplate (a Contract need not have a Case at all —
+   e.g. a standalone retainer — so it also hangs directly off Tenant)
  └─ Workflow ─ WorkflowVersion (definition, not instance)
  └─ SLA ─ Escalation (policy definitions)
  └─ Queue (definitions)
@@ -143,6 +146,52 @@ flipping invoice status; see §5.
 
 **`edospmis_deliveries`** (case_id, scheduled_at, dispatched_at,
 delivered_at, proof_type: signature/photo/otp, proof_ref, client_confirmed_at).
+
+**Legal / contract provisioning** (PRD §8.13) — a Lawyer/Advocate drafts and
+sends a contract to a client; it may or may not be tied to a Case:
+
+**`edospmis_contract_templates`** — id, tenant_id, name, contract_type
+(tenant-defined vocabulary: service_agreement/nda/retainer/
+framework_agreement/custom), body (the merge-field source text — content,
+not a rendered file), is_active. A contract's first version is normally
+rendered from one of these with the client/case's real data merged in,
+though a lawyer can also start from a blank draft.
+
+**`edospmis_contracts`** — id, tenant_id, case_id (nullable — a retainer
+needs no Case), client_id, contract_number (tenant numbering format, same
+pattern as Case numbering), contract_type, title, status (draft /
+internal_review / sent / client_review / signed / active / expired /
+terminated / superseded / declined), current_version_id, drafted_by,
+requires_witness boolean, signing_deadline, effective_date, expiry_date,
+voided_reason.
+
+**`edospmis_contract_versions`** — id, contract_id, version_number,
+document_id (fk → `edospmis_documents`; the rendered, tenant-branded PDF),
+document_hash (sha-256 of the rendered file, so an executed contract can
+later be verified byte-for-byte against what was actually signed),
+summary_of_changes, created_by. Append-only, same pattern as
+`edospmis_po_versions` — a post-signature amendment creates a **new**
+version and moves the contract back to a re-signable status; it never
+mutates a version that has already been sent or signed.
+
+**`edospmis_contract_parties`** — id, contract_id, party_role
+(client_signer / tenant_signer / witness), name, email, phone,
+signing_order (enforces, e.g., a witness cannot attest ahead of the party
+they're witnessing), access_token + token_expires_at (a client contact or
+an external witness is not required to hold a platform account at all —
+they reach their own signing step through this single-use secure link,
+the same mechanism every real e-signature product uses), consented_electronic
+boolean (the affirmative "I agree to sign electronically" step, captured
+*before* the signature — never assumed by the act of signing itself),
+status (pending/viewed/signed/declined), signed_at, signature_ref (the
+evidentiary record — see the build-vs-buy note below), ip_address, user_agent.
+
+**`edospmis_contract_events`** — id, contract_id, event_type (drafted/sent/
+viewed/signed/declined/voided/reminder_sent/amended), actor_type (staff/
+client/witness/system), actor_label, occurred_at — a **client-visible**
+timeline, deliberately separate from the tenant-internal-only
+`edospmis_audit_logs`, the same distinction real e-signature products draw
+between "activity you can see" and "the vendor's own internal log."
 
 **`edospmis_documents`** (polymorphic: owner_type, owner_id, storage_path,
 content_type, uploaded_by, category, version) — see §8.
@@ -366,6 +415,72 @@ Temporal has a first-class Node SDK this stack can adopt incrementally).
   routing in early phases (that's the Phase 8 AI queue-optimization idea,
   explicitly deferred).
 
+### 4.6 Contract execution: branding, signing, witnessing
+
+This is the design behind the entities introduced in §1.2's "Legal /
+contract provisioning" block (PRD §8.13).
+
+- **Tenant branding on the rendered document**: `edospmis_tenants.branding`
+  jsonb (already part of the Phase 1 schema) holds logo URL, brand color and
+  letterhead text, set by a Tenant Administrator. Rendering a contract
+  version reads this at render time and stamps it into the PDF's header,
+  footer and signature block — two tenants' contracts must never look
+  alike, because each tenant is a distinct legal entity issuing its own
+  paper, not a platform-branded template. The signature/witness block
+  itself is part of the same rendered layout: one block per
+  `edospmis_contract_parties` row, laid out in `party_role` order, with the
+  witness block only appearing at all when `requires_witness` is true.
+- **Signing without a platform account**: a client contact or an external
+  witness almost never has (or should need) a login to this platform. Each
+  `edospmis_contract_parties` row carries its own single-use
+  `access_token`, delivered by email/SMS — the same "click a link, no
+  account needed" mechanism every real e-signature product (DocuSign,
+  SignWell, …) uses. This is why client/witness signing is **not** gated
+  through the internal RBAC permission catalogue in §3 — it isn't a tenant
+  staff action at all, it's the named external party's own act on a
+  document addressed specifically to them, authorized by possession of
+  their token rather than by a role grant.
+- **Consent before signature**: `consented_electronic` is captured as its
+  own explicit step before the signature itself, not inferred from the act
+  of signing — the same affirmative-consent pattern electronic-signature
+  law generally expects (this is a UX/evidentiary discipline, not a
+  jurisdiction-specific legal claim — see the caveat below).
+- **Enforced signing order**: `signing_order` on each party row means the
+  platform itself refuses to accept a witness's signature before the party
+  they're witnessing has signed (PRD's Witnessed Contract Signing
+  acceptance criterion, §10) — this is checked in the same server action
+  that records a signature, not left to UI discipline alone.
+- **Tamper-evidence**: the executed PDF is hashed
+  (`edospmis_contract_versions.document_hash`) the moment every required
+  party has signed, so the exact bytes that were signed can be verified
+  later against the stored file — before that point, no version is
+  considered executed, matching the PRD acceptance criterion that a
+  partial signature set never produces an executed document.
+- **Build vs buy — signature capture**: the module's first cut (Phase 3)
+  ships a typed-name + explicit-consent-checkbox + timestamp + IP
+  attestation, clearly disclosed to signers as an electronic signature.
+  This is *build*, not buy, because it's cheap, and it is explicitly framed
+  as a lower evidentiary bar than a dedicated e-signature provider — the
+  fast-follow is integrating a real provider (DocuSign or a lighter API
+  such as SignWell/Dropbox Sign) for contracts where a tenant's counsel
+  wants stronger evidentiary weight than an in-house attestation gives.
+  Buying that integration (rather than building drawn-signature capture,
+  identity verification, and provider-grade tamper-sealing in-house) is the
+  same build-vs-buy logic already applied to auth, email and SMS in §71 —
+  none of that is this platform's core differentiator.
+- **Legal caveat, repeated here because it matters**: the platform enforces
+  whatever `requires_witness` and signing order a tenant's own counsel
+  configures — it does not determine or certify that a given contract type
+  is legally sufficient with or without a witness/notarization in any
+  jurisdiction. That judgment stays with the Lawyer/Advocate using it (PRD
+  Non-Goal NG3).
+- **Role scope**: the Lawyer/Advocate role is granted at `scope_type =
+  'tenant'` (§1.2/§3), not scoped to one department or branch — counsel
+  advises across whichever case or client needs it, regardless of which
+  department originated the underlying request, so their grant is
+  deliberately tenant-wide rather than following the department-scoped
+  pattern used for, e.g., a Department Manager's approval authority.
+
 ---
 
 ## 5. Three-Way Matching
@@ -569,6 +684,7 @@ product's premium feel, since staff live in these two screens all day.
 | Workflow engine | Custom, Postgres-backed | See §4.1 in full | Camunda, Temporal | Deferred, not rejected — explicit revisit trigger documented |
 | Background/scheduled work | Vercel Cron → route handlers | Zero new infra, same deploy | Dedicated worker process, Redis/BullMQ | Unjustified until job volume/latency needs exceed a 5-minute poll cadence |
 | Notifications | Resend/Postmark (email), Africa's Talking-class provider (SMS) | Buy — see §9 | Build SMTP/SMS gateway | Not worth engineering time at any phase here |
+| E-signature (fast-follow, §4.6) | In-house attestation first (typed name + consent + IP + hash), then buy a provider (DocuSign / SignWell-class) | Cheap to ship first cut in-house; buy the stronger evidentiary tier once a tenant's counsel needs it — not this platform's differentiator | Build full e-signature (drawn capture, identity verification, provider-grade sealing) in-house | Building the stronger tier in-house would mean re-solving a legally-sensitive problem dedicated vendors already solve well |
 | Deployment | Vercel (app) + Supabase (data/auth/storage) | Matches existing operational muscle memory across this developer's portfolio | Self-hosted (Docker/Kubernetes) | Kubernetes explicitly not justified per PRD's own instruction not to default to it |
 | Observability | Sentry (errors) + Vercel Analytics + Supabase logs | Buy, fast to wire up, matches team scale | Self-hosted OpenTelemetry/Prometheus/Grafana stack | Real operational overhead unjustified before multi-tenant scale demands it; revisit at Phase 6+ if tenant count grows materially |
 | CI/CD | GitHub Actions (lint, typecheck, build, migration check) → Vercel deploy | Free at this scale, integrates with existing GitHub-based workflow | Custom pipeline | No benefit |
@@ -671,7 +787,7 @@ mobile-width visual checks on Case detail and approval flows.
 | 0 | This document + PRD.md | Reviewed and approved by the user before any code |
 | 1 | Auth, tenant provisioning, org structure, users/roles/permissions, RBAC, audit log plumbing, design system base, CI/CD, DR restore test | A tenant admin can sign up, configure departments/roles, and every action is audited |
 | 2 | Case+PR, workflow engine, queue engine, approval engine, SLA engine (default policies), Case detail workspace, chevron stepper, My Work, client portal v1 | A PR can be submitted, approved through a configured chain, and tracked to a generic "fulfilled" close, entirely without procurement/finance modules |
-| 3 | Procurement: RFQ, supplier management, quotations, evaluation, PO | An approved PR can go through RFQ → PO without leaving the platform |
+| 3 | Procurement: RFQ, supplier management, quotations, evaluation, PO. **Plus Legal/Contract Provisioning** (§4.6, PRD §8.13): contract templates, tenant-branded rendering, secure-link signing with optional witness step, contract-specific timeline | An approved PR can go through RFQ → PO without leaving the platform; a Lawyer/Advocate can draft, send and get a contract executed (client-signed, witnessed where flagged, hashed) without leaving the platform |
 | 4 | Fulfilment: GRN, inspection, delivery, client confirmation, case closure rules | A PO can be received, inspected, delivered and the Case formally closed |
 | 5 | Finance: invoices, three-way matching, exceptions; advanced controls: delegation, SoD, advanced SLA/escalation | Three-way match exceptions correctly block payment approval; SoD rules correctly block conflicting actions |
 | 6 | Analytics: executive/procurement/department dashboards, bottleneck views | Reporting reads only from already-captured data — no new capture work |

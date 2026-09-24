@@ -16,8 +16,9 @@ blueprint; this file only covers running what's built so far.
 - Multi-tenant org structure tables (business units, branches,
   departments, teams) — schema and RLS only; an admin UI for these lands
   with Phase 2's Case module, which is what actually needs them.
-- RBAC: a fixed 36-key permission catalogue, tenant-scoped custom roles,
-  a Roles admin screen (create a role, toggle its permissions by
+- RBAC: a fixed 41-key permission catalogue (includes `legal.contract.*`,
+  seeded ahead of the module itself — see below), tenant-scoped custom
+  roles, a Roles admin screen (create a role, toggle its permissions by
   category, delete an unused custom role — system roles are read-only).
 - Users admin screen: invite a teammate by email (real Supabase Auth
   invite, not a mock — `/update-password` is where they land after
@@ -34,10 +35,17 @@ blueprint; this file only covers running what's built so far.
   wired up.
 
 Not yet built (later phases, see ARCHITECTURE.md §18): Case/PR/workflow/
-queue/approval/SLA engine (Phase 2), procurement — RFQ/supplier/PO
-(Phase 3), fulfilment — GRN/inspection/delivery/closure (Phase 4),
-finance/three-way-matching (Phase 5), analytics (Phase 6), integrations
-(Phase 7).
+queue/approval/SLA engine (Phase 2), procurement — RFQ/supplier/PO —
+**and Legal/Contract Provisioning** — tenant-branded contract rendering,
+secure-link client/witness signing, versioning and hashing (Phase 3, see
+ARCHITECTURE.md §4.6 and PRD.md §8.13), fulfilment —
+GRN/inspection/delivery/closure (Phase 4), finance/three-way-matching
+(Phase 5), analytics (Phase 6), integrations (Phase 7).
+
+The Phase 3 Lawyer/Advocate role and its five `legal.contract.*`
+permissions are already seeded into every new tenant today
+(`0002_legal_contract_rbac.sql`) — the module has no UI yet, but the RBAC
+scaffolding for it is live.
 
 ## Stack
 
