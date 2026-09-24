@@ -61,17 +61,33 @@ blueprint; this file only covers running what's built so far.
   cross-tenant isolation check. This pass also caught and fixed a real gap
   before commit — see `0004_admin_holds_dept_manager.sql`.
 
-Not yet built (later phases, see ARCHITECTURE.md §18): procurement —
-RFQ/supplier/PO — **and Legal/Contract Provisioning** — tenant-branded
-contract rendering, secure-link client/witness signing, versioning and
-hashing (Phase 3, see ARCHITECTURE.md §4.6 and PRD.md §8.13), fulfilment —
-GRN/inspection/delivery/closure (Phase 4), finance/three-way-matching
-(Phase 5), analytics (Phase 6), integrations (Phase 7).
+**Phase 3 — Procurement + Legal/Contract Provisioning: implemented (v1 cuts).**
 
-The Phase 3 Lawyer/Advocate role and its five `legal.contract.*`
-permissions are already seeded into every new tenant today
-(`0002_legal_contract_rbac.sql`) — the module has no UI yet, but the RBAC
-scaffolding for it is live.
+- Procurement: an approved case gets a "Start procurement" button (visible
+  to whoever holds `procurement.rfq.create`), which opens an RFQ seeded
+  from the PR's own items. From the Case detail page's Procurement panel:
+  invite suppliers, record what they quoted, and award — issuing a PO
+  (`PO-2026-000001`, derived from the case number) and moving the case to
+  Awarded. Suppliers get their own admin screen, same pattern as Clients.
+- Legal/Contract Provisioning v1: a Lawyer/Advocate drafts a contract body
+  as plain text, adds signing parties (client signer / tenant countersigner
+  / witness), sends it, and staff record each signature as it comes back —
+  the contract flips to Signed automatically the moment every party has.
+  This is the first, honest slice of the full model ARCHITECTURE.md §4.6
+  already designed — no templates, no tenant-branded/hashed PDF rendering,
+  no secure external no-login signing link yet. Those remain real,
+  separate follow-up work, not a shortcut around the design.
+- Verified live end-to-end: a disposable tenant ran the complete
+  PR → approval → procurement → PO-awarded path, and separately a two-party
+  (including a witness) contract from draft through fully signed — both
+  against the shared Supabase project before commit.
+
+Not yet built (later phases, see ARCHITECTURE.md §18): fulfilment —
+GRN/inspection/delivery/closure (Phase 4), finance/three-way-matching
+(Phase 5), analytics (Phase 6), integrations (Phase 7). Also not yet
+built: the Platform Super Admin role (cross-tenant oversight for EDOS
+Centre as the SaaS operator) — every account today is scoped to one
+tenant only, by design, with no back door across tenants.
 
 ## Stack
 
@@ -111,6 +127,12 @@ full reasoning once written).
 - `0004_admin_holds_dept_manager.sql` — fixes a gap the pre-commit smoke
   test caught: the founding admin now also holds Department Manager so
   the seeded default approval rule is immediately actionable solo.
+- `0005_phase3_procurement.sql` — Phase 3a: suppliers, RFQs, quotations,
+  evaluations, purchase orders, `edospmis_start_procurement()`,
+  `edospmis_award_po()`; extends the case lifecycle past "approved".
+- `0006_phase3_contracts_v1.sql` — Phase 3b: contracts + signing parties
+  (v1 cut — see the migration header), `edospmis_send_contract()`,
+  `edospmis_record_contract_signature()`, `edospmis_void_contract()`.
 
 ## Testing
 
