@@ -34,11 +34,37 @@ blueprint; this file only covers running what's built so far.
   badges and layout it sits in are the real Phase-2 destination already
   wired up.
 
-Not yet built (later phases, see ARCHITECTURE.md §18): Case/PR/workflow/
-queue/approval/SLA engine (Phase 2), procurement — RFQ/supplier/PO —
-**and Legal/Contract Provisioning** — tenant-branded contract rendering,
-secure-link client/witness signing, versioning and hashing (Phase 3, see
-ARCHITECTURE.md §4.6 and PRD.md §8.13), fulfilment —
+**Phase 2 — Case + PR + Workflow + Queue + Approval + SLA (MVP): implemented.**
+
+- Cases and PRs: a PR is drafted with dynamic line items, opens a Case
+  with a tenant-formatted case number (`CASE-{year}-{seq}`, atomically
+  sequenced), and is submitted for approval from the Case detail page.
+- Workflow engine: a default `draft → approval → approved` workflow is
+  seeded per tenant, versioned and stored as data (`edospmis_workflow_versions.definition`)
+  so the Case detail chevron (`WorkflowStepper`) reads real stage labels —
+  see ARCHITECTURE.md §1.2/§4.2 for the scope cut (procedural, not a fully
+  generic interpreter yet).
+- Approval engine: tenant-configurable, amount-tiered rules with ordered
+  role steps (Approval Rules admin screen); `edospmis_submit_pr` and
+  `edospmis_decide_approval` run the chain as single atomic transactions.
+- Queue + SLA: role-based queue entries; SLA status is computed live from
+  a stored due timestamp (no calendar or escalation ticker yet — plain
+  wall-clock, see the 0003 migration header for the full list of
+  deliberate cuts).
+- My Work now shows real pending-approval tasks with live SLA status,
+  replacing Phase 1's empty state.
+- Clients are a lightweight staff-managed reference list (no client
+  login/portal yet — that's separate work comparable in size to the
+  Phase 3 contract-signing tokens below).
+- Verified live end-to-end against the shared Supabase project: signup →
+  provision → PR → submit → approve → case closed out as Approved, plus a
+  cross-tenant isolation check. This pass also caught and fixed a real gap
+  before commit — see `0004_admin_holds_dept_manager.sql`.
+
+Not yet built (later phases, see ARCHITECTURE.md §18): procurement —
+RFQ/supplier/PO — **and Legal/Contract Provisioning** — tenant-branded
+contract rendering, secure-link client/witness signing, versioning and
+hashing (Phase 3, see ARCHITECTURE.md §4.6 and PRD.md §8.13), fulfilment —
 GRN/inspection/delivery/closure (Phase 4), finance/three-way-matching
 (Phase 5), analytics (Phase 6), integrations (Phase 7).
 
@@ -74,9 +100,17 @@ component.
 Migrations live in `supabase/migrations/`, applied directly against the
 shared project (no local Supabase stack is run for this app currently —
 see `MULTI_TENANCY.md`, a Phase 1 documentation deliverable, for the
-full reasoning once written). `0001_platform_foundation.sql` is the
-Phase 1 schema: org structure, users, memberships, RBAC, audit log, and
-the `edospmis_provision_tenant()` function sign-up calls.
+full reasoning once written).
+
+- `0001_platform_foundation.sql` — Phase 1: org structure, users,
+  memberships, RBAC, audit log, `edospmis_provision_tenant()`.
+- `0002_legal_contract_rbac.sql` — forward-seeds the Phase 3 Lawyer/Advocate
+  role and `legal.contract.*` permissions (module itself not built yet).
+- `0003_phase2_case_pr_workflow.sql` — Phase 2: cases, PRs, workflow/queue/
+  approval/SLA tables, `edospmis_submit_pr()`, `edospmis_decide_approval()`.
+- `0004_admin_holds_dept_manager.sql` — fixes a gap the pre-commit smoke
+  test caught: the founding admin now also holds Department Manager so
+  the seeded default approval rule is immediately actionable solo.
 
 ## Testing
 
