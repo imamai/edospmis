@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * EDOSPMIS design tokens
+ *
+ * A distinct identity from EDOS Centre's other products: a deep
+ * procurement-blue brand (trust, enterprise, "the ledger" rather than
+ * "the farm"), a warm amber reserved for the one accent action, and
+ * semantic status colors kept separate from brand per ARCHITECTURE.md
+ * §10 — a case is never "brand-colored", only ever normal/warning/
+ * breached/blocked.
+ * ------------------------------------------------------------------ */
+
+@theme {
+  --color-canvas: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-surface-sunk: #eef0f6;
+  --color-ink: #161a23;
+  --color-ink-soft: #545b6b;
+  --color-ink-faint: #8b91a1;
+  --color-line: #e2e5ee;
+  --color-line-strong: #cdd2e0;
+
+  --color-brand: #1d3557;
+  --color-brand-dark: #12233b;
+  --color-brand-darker: #0b1626;
+  --color-brand-mid: #2f4d78;
+  --color-brand-soft: #e8edf5;
+  --color-brand-tint: #f2f5fa;
+
+  --color-accent: #d98e2f;
+  --color-accent-dark: #a86a1c;
+  --color-accent-soft: #fbf1e1;
+
+  --color-good: #2e7d52;
+  --color-good-soft: #e6f4ec;
+  --color-attention: #b45309;
+  --color-attention-soft: #fef3e2;
+  --color-critical: #b42318;
+  --color-critical-soft: #feecea;
+  --color-info: #1f6f8b;
+  --color-info-soft: #e5f2f6;
+
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-card: 0 1px 2px rgb(22 26 35 / 0.04), 0 1px 3px rgb(22 26 35 / 0.06);
+  --shadow-raised: 0 4px 12px rgb(22 26 35 / 0.06), 0 12px 32px -12px rgb(22 26 35 / 0.16);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-frame {
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-mid);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--color-brand-soft);
+  color: var(--color-brand-dark);
+}
+
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+@keyframes edospmis-spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: edospmis-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
