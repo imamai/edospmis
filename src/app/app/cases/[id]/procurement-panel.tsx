@@ -2,17 +2,32 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download } from "lucide-react";
-import { inviteSupplierToRfq, recordQuotation, awardPO, approvePO, type ProcurementState } from "../../procurement/actions";
+import { Download, Copy, Mail, Check, AlertTriangle } from "lucide-react";
+import {
+  inviteSupplierToRfq,
+  inviteProspectToRfq,
+  shareRfqInviteLink,
+  recordQuotation,
+  awardPO,
+  approvePO,
+  type ProcurementState,
+} from "../../procurement/actions";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
-import type { Supplier } from "@/lib/database.types";
+import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 
 const initialQuotation: ProcurementState = { error: null, ok: null };
+
+const INVITE_STATUS_TONE: Record<RfqInviteStatus, "neutral" | "info" | "good" | "critical"> = {
+  invited: "neutral",
+  viewed: "info",
+  submitted: "good",
+  declined: "critical",
+};
 
 export function ProcurementPanel({
   detail,
@@ -28,12 +43,23 @@ export function ProcurementPanel({
   canApprovePO: boolean;
 }) {
   const router = useRouter();
-  const { rfq, invitedSupplierIds, quotations, po } = detail;
+  const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
   const invitedSet = new Set(invitedSupplierIds);
   const uninvited = suppliers.filter((s) => !invitedSet.has(s.id));
 
   const [invitePending, startInvite] = useTransition();
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const [sourcing, setSourcing] = useState(false);
+  const [prospectName, setProspectName] = useState("");
+  const [prospectEmail, setProspectEmail] = useState("");
+  const [prospectPhone, setProspectPhone] = useState("");
+  const [prospectPending, startProspect] = useTransition();
+  const [prospectError, setProspectError] = useState<string | null>(null);
+
+  const [shareMsg, setShareMsg] = useState<Record<string, { text: string; error: boolean }>>({});
+  const [sharePending, startShare] = useTransition();
+
   const [quoteState, quoteAction, quotePending] = useActionState(recordQuotation, initialQuotation);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
@@ -56,6 +82,42 @@ export function ProcurementPanel({
         router.refresh();
       }
     });
+  }
+
+  function addProspect() {
+    startProspect(async () => {
+      const result = await inviteProspectToRfq(rfq.id, rfq.case_id, prospectName, prospectEmail, prospectPhone);
+      if (result.error) setProspectError(result.error);
+      else {
+        setProspectError(null);
+        setProspectName("");
+        setProspectEmail("");
+        setProspectPhone("");
+        setSourcing(false);
+        router.refresh();
+      }
+    });
+  }
+
+  function copyInviteLink(token: string, inviteId: string) {
+    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setShareMsg((m) => ({ ...m, [inviteId]: { text: "Copied.", error: false } }));
+      setTimeout(() => setShareMsg((m) => ({ ...m, [inviteId]: { text: "", error: false } })), 2000);
+    });
+  }
+
+  function emailInviteLink(inviteId: string) {
+    startShare(async () => {
+      const result = await shareRfqInviteLink(rfq.case_id, inviteId);
+      setShareMsg((m) => ({ ...m, [inviteId]: { text: result.error ?? result.ok ?? "", error: Boolean(result.error) } }));
+    });
+  }
+
+  function whatsappHref(token: string, phone: string) {
+    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
+    const text = encodeURIComponent(`Request for quotation: ${rfq.title}\n${link}`);
+    return `https://wa.me/${phone.replace(/[^\d+]/g, "").replace(/^\+/, "")}?text=${text}`;
   }
 
   function confirmAward(quotationId: string) {
@@ -138,20 +200,78 @@ export function ProcurementPanel({
               </div>
             )}
             {inviteError && <p className="mt-1 text-xs text-critical">{inviteError}</p>}
+
+            <div className="mt-3">
+              {sourcing ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-line p-3 sm:flex-row sm:items-end sm:flex-wrap">
+                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} className="flex-1" />
+                  <TextInput label="Email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} hint="Optional" className="flex-1" />
+                  <TextInput label="Phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} hint="Optional, for WhatsApp" className="flex-1" />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" busy={prospectPending} onClick={addProspect}>
+                      Source
+                    </Button>
+                    <button type="button" onClick={() => setSourcing(false)} className="text-sm font-semibold text-ink-faint hover:text-ink">
+                      Cancel
+                    </button>
+                  </div>
+                  {prospectError && <p className="w-full text-xs text-critical">{prospectError}</p>}
+                </div>
+              ) : (
+                <button type="button" onClick={() => setSourcing(true)} className="text-xs font-semibold text-brand hover:underline">
+                  + Source a new supplier not yet in the system
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {invitedSupplierIds.length > 0 && (
+        {invites.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold text-ink">Invited</p>
-            <div className="flex flex-wrap gap-1.5">
-              {suppliers
-                .filter((s) => invitedSet.has(s.id))
-                .map((s) => (
-                  <Badge key={s.id} tone="brand">
-                    {s.name}
-                  </Badge>
-                ))}
+            <div className="flex flex-col divide-y divide-line">
+              {invites.map((inv) => {
+                const displayName = inv.invite_name ?? suppliers.find((s) => s.id === inv.supplier_id)?.name ?? "Supplier";
+                const canShare = canInvite && (inv.status === "invited" || inv.status === "viewed");
+                return (
+                  <div key={inv.id} className="flex flex-col gap-1.5 py-2.5 first:pt-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-ink">{displayName}</p>
+                      <Badge tone={INVITE_STATUS_TONE[inv.status]}>{inv.status}</Badge>
+                    </div>
+                    {canShare && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => copyInviteLink(inv.access_token, inv.id)}>
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy link
+                        </Button>
+                        {(inv.invite_email || suppliers.find((s) => s.id === inv.supplier_id)?.email) && (
+                          <Button size="sm" variant="secondary" busy={sharePending} onClick={() => emailInviteLink(inv.id)}>
+                            <Mail className="h-3.5 w-3.5" />
+                            Email
+                          </Button>
+                        )}
+                        {inv.invite_phone && (
+                          <a
+                            href={whatsappHref(inv.access_token, inv.invite_phone)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong px-3 text-sm font-medium text-ink hover:border-brand hover:text-brand"
+                          >
+                            WhatsApp
+                          </a>
+                        )}
+                        {shareMsg[inv.id]?.text && (
+                          <span className={`inline-flex items-center gap-1 text-xs ${shareMsg[inv.id].error ? "text-critical" : "text-ink-faint"}`}>
+                            {shareMsg[inv.id].error ? <AlertTriangle className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                            {shareMsg[inv.id].text}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -188,7 +308,9 @@ export function ProcurementPanel({
               {quotations.map((q) => (
                 <div key={q.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
                   <div>
-                    <p className="text-sm font-medium text-ink">{q.supplier_name}</p>
+                    <p className="text-sm font-medium text-ink">
+                      {q.supplier_name} {q.submitted_via === "supplier_portal" && <span className="font-normal text-ink-faint">· via portal</span>}
+                    </p>
                     <p className="text-xs text-ink-faint">
                       {formatMoney(q.total_cents, { currency: q.currency })} · {formatDate(q.submitted_at)}
                     </p>

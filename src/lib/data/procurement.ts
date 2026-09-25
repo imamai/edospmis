@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Evaluation, PurchaseOrder, Quotation, Rfq, Supplier } from "@/lib/database.types";
+import type { Evaluation, PurchaseOrder, Quotation, Rfq, RfqInvite, Supplier } from "@/lib/database.types";
 
 export async function getSuppliers(tenantId: string, includeInactive = false): Promise<Supplier[]> {
   const supabase = await createClient();
@@ -13,6 +13,7 @@ export async function getSuppliers(tenantId: string, includeInactive = false): P
 
 export interface ProcurementDetail {
   rfq: Rfq;
+  invites: RfqInvite[];
   invitedSupplierIds: string[];
   quotations: (Quotation & { supplier_name: string })[];
   evaluation: Evaluation | null;
@@ -29,8 +30,8 @@ export async function getProcurementDetail(tenantId: string, caseId: string): Pr
     .maybeSingle();
   if (!rfq) return null;
 
-  const [{ data: invited }, { data: quotations }, { data: evaluation }, { data: po }] = await Promise.all([
-    supabase.from("edospmis_rfq_suppliers").select("supplier_id").eq("rfq_id", rfq.id),
+  const [{ data: invites }, { data: quotations }, { data: evaluation }, { data: po }] = await Promise.all([
+    supabase.from("edospmis_rfq_suppliers").select("*").eq("rfq_id", rfq.id).order("invited_at"),
     supabase
       .from("edospmis_quotations")
       .select("*, edospmis_suppliers(name)")
@@ -42,7 +43,8 @@ export async function getProcurementDetail(tenantId: string, caseId: string): Pr
 
   return {
     rfq: rfq as Rfq,
-    invitedSupplierIds: (invited ?? []).map((i) => i.supplier_id),
+    invites: (invites ?? []) as RfqInvite[],
+    invitedSupplierIds: (invites ?? []).filter((i) => i.supplier_id).map((i) => i.supplier_id as string),
     quotations: (quotations ?? []).map((q) => {
       const supplier = q.edospmis_suppliers as unknown as { name: string } | null;
       return { ...(q as unknown as Quotation), supplier_name: supplier?.name ?? "" };

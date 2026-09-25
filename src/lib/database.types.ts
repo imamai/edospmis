@@ -285,6 +285,15 @@ export interface Rfq {
   created_at: string;
 }
 
+export interface QuotationLinePrice {
+  description: string;
+  qty: number;
+  unit: string;
+  unit_price_cents: number;
+}
+
+export type QuotationSource = "staff" | "supplier_portal";
+
 export interface Quotation {
   id: string;
   tenant_id: string;
@@ -293,9 +302,29 @@ export interface Quotation {
   total_cents: number;
   currency: string;
   notes: string | null;
+  submitted_via: QuotationSource;
+  line_prices: QuotationLinePrice[] | null;
   submitted_at: string;
   created_by: string | null;
   created_at: string;
+}
+
+export type RfqInviteStatus = "invited" | "viewed" | "submitted" | "declined";
+
+export interface RfqInvite {
+  id: string;
+  tenant_id: string;
+  rfq_id: string;
+  supplier_id: string | null;
+  invite_name: string | null;
+  invite_email: string | null;
+  invite_phone: string | null;
+  access_token: string;
+  token_expires_at: string;
+  status: RfqInviteStatus;
+  viewed_at: string | null;
+  responded_at: string | null;
+  invited_at: string;
 }
 
 export interface Evaluation {
