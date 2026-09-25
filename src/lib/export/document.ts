@@ -27,6 +27,7 @@ export interface DocumentLineItem {
 export interface DocumentSignature {
   role: string;
   name: string;
+  title?: string | null;
   status: string;
   when: string | null;
   imageDataUrl?: string | null;
@@ -214,72 +215,76 @@ export function documentPdf(d: DocumentExport): Uint8Array {
     y += 10;
   }
 
-  // ── Signatures ──
+  // ── Signatures — a classic side-by-side block per party (this side vs.
+  //    the other side), not a status table, so it reads like a real
+  //    signature page: role, signature line, typed name, title, date. ──
   if (d.signatures && d.signatures.length > 0) {
-    ensureSpace(20 + d.signatures.length * 20);
+    const gap = 24;
+    const colW = (usable - gap) / 2;
+    const imgH = 54;
+    const blockH = 118;
+    const rows = Math.ceil(d.signatures.length / 2);
+    ensureSpace(24);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.setTextColor(...INK);
     doc.text("Signing parties", margin, y);
-    y += 16;
-    const widths = [usable * 0.28, usable * 0.28, usable * 0.22, usable * 0.22];
-    const cols = ["Role", "Name", "Status", "Signed"];
-    doc.setFillColor(...BRAND);
-    doc.rect(margin, y, usable, 16, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(255, 255, 255);
-    let x = margin;
-    cols.forEach((c, i) => {
-      doc.text(latin(c), x + 4, y + 11);
-      x += widths[i];
-    });
-    y += 16;
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...INK);
-    d.signatures.forEach((s, i) => {
-      ensureSpace(18);
-      if (i % 2 === 1) {
-        doc.setFillColor(...ROW_ALT);
-        doc.rect(margin, y, usable, 18, "F");
-      }
-      let cx = margin;
-      [s.role, s.name, s.status, s.when ?? "—"].forEach((val, idx) => {
-        doc.setFontSize(9);
-        doc.text(latin(val), cx + 4, y + 12);
-        cx += widths[idx];
-      });
-      y += 18;
-    });
-    y += 10;
+    y += 18;
 
-    const withImages = d.signatures.filter((s) => s.imageDataUrl);
-    if (withImages.length > 0) {
-      const boxW = usable / withImages.length - 10;
-      const boxH = 56;
-      ensureSpace(boxH + 24);
-      withImages.forEach((s, i) => {
-        const x = margin + i * (boxW + 10);
+    for (let row = 0; row < rows; row++) {
+      ensureSpace(blockH + 12);
+      for (let col = 0; col < 2; col++) {
+        const s = d.signatures[row * 2 + col];
+        if (!s) continue;
+        const x = margin + col * (colW + gap);
+        let by = y;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(...FAINT);
+        doc.text(latin(s.role.toUpperCase()), x, by);
+        by += 12;
+
         doc.setDrawColor(...FAINT);
         doc.setLineWidth(0.5);
-        doc.rect(x, y, boxW, boxH);
-        const format = s.imageDataUrl!.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-        try {
-          doc.addImage(s.imageDataUrl!, format, x + 4, y + 4, boxW - 8, boxH - 8, undefined, "FAST");
-        } catch {
-          // A malformed data URL should never take down the whole export.
+        doc.rect(x, by, colW, imgH);
+        if (s.imageDataUrl) {
+          const format = s.imageDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+          try {
+            doc.addImage(s.imageDataUrl, format, x + 4, by + 4, colW - 8, imgH - 8, undefined, "FAST");
+          } catch {
+            // A malformed data URL should never take down the whole export.
+          }
+        } else {
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(8);
+          doc.setTextColor(...FAINT);
+          doc.text("Not yet signed", x + 6, by + imgH / 2 + 3);
         }
-      });
-      y += boxH + 4;
-      withImages.forEach((s, i) => {
-        const x = margin + i * (boxW + 10);
+        by += imgH + 14;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...INK);
+        doc.text(latin(s.name), x, by);
+        by += 13;
+
+        if (s.title) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(...FAINT);
+          doc.text(latin(s.title), x, by);
+          by += 12;
+        }
+
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(...FAINT);
-        doc.text(latin(`${s.name} — ${s.role}`), x, y);
-      });
-      y += 16;
+        doc.text(latin(s.status === "signed" && s.when ? `Signed ${s.when}` : s.status), x, by);
+      }
+      y += blockH;
     }
+    y += 6;
   }
 
   if (d.signatureNote) {

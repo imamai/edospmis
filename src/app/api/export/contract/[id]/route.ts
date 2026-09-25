@@ -42,7 +42,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     bodyText: contract.body,
     signatures: parties.map((p) => ({
       role: PARTY_ROLE_LABEL[p.party_role] ?? p.party_role,
-      name: p.signed_name ? `${p.signed_name}${p.signed_title ? ` (${p.signed_title})` : ""}` : p.name,
+      name: p.signed_name ?? p.name,
+      title: p.signed_title,
       status: p.status,
       when: p.signed_at ? formatDate(p.signed_at) : null,
       imageDataUrl: p.signature_image,
