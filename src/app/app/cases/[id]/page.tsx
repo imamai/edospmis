@@ -21,6 +21,8 @@ import { HoldBlockedControls } from "./hold-blocked-controls";
 import { CancelCaseButton } from "./cancel-case-button";
 import { CloseCaseButton } from "./close-case-button";
 
+const TERMINAL_CASE_STATUSES = ["closed", "rejected", "returned", "cancelled"];
+
 const STATUS_TONE = {
   draft: "neutral",
   submitted: "info",
@@ -66,9 +68,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const poIssued = hasPO && procurementDetail!.po!.status !== "pending_approval";
   const fulfilmentDetail = poIssued ? await getFulfilmentDetail(session.tenant.id, c.id) : null;
   const financeDetail = poIssued ? await getFinanceDetail(session.tenant.id, c.id) : null;
-  const canClose = can(session, "procurement.case.close") && !["closed", "rejected", "returned", "cancelled"].includes(c.status);
-  const canCancel = can(session, "procurement.pr.cancel") && !["closed", "rejected", "returned", "cancelled"].includes(c.status);
-  const canHold = can(session, "procurement.case.hold");
+  const canClose = can(session, "procurement.case.close") && !TERMINAL_CASE_STATUSES.includes(c.status);
+  const canCancel = can(session, "procurement.pr.cancel") && !TERMINAL_CASE_STATUSES.includes(c.status);
+  const canHold = can(session, "procurement.case.hold") && !TERMINAL_CASE_STATUSES.includes(c.status);
 
   const stageDurations = await getStageDurations(session.tenant.id, c.id);
   const currentStage = stageDurations[stageDurations.length - 1];
