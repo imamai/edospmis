@@ -33,8 +33,8 @@ export function WebhookForm() {
   return (
     <div className="flex flex-col gap-3">
       <form ref={formRef} onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <TextInput label="Endpoint URL" name="url" type="url" required placeholder="https://example.com/webhooks/edospmis" className="flex-1" />
-        <TextInput label="Events" name="event_prefixes" hint="Optional — comma-separated prefixes, e.g. invoice.,po. Leave blank for everything." className="flex-1" />
+        <TextInput label="Endpoint URL" name="url" type="url" required hint=" " placeholder="https://example.com/webhooks/edospmis" className="flex-1" />
+        <TextInput label="Events" name="event_prefixes" hint="Optional, e.g. invoice.,po. — blank means everything." className="flex-1" />
         <Button type="submit" busy={pending}>
           <Plus className="h-4 w-4" />
           Add webhook

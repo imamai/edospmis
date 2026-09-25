@@ -22,7 +22,7 @@ export function CreateRoleForm() {
 
   return (
     <form ref={formRef} action={action} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <TextInput label="Role name" name="name" required className="flex-1" placeholder="e.g. Warehouse Supervisor" />
+      <TextInput label="Role name" name="name" required hint=" " className="flex-1" placeholder="e.g. Warehouse Supervisor" />
       <TextInput label="Description" name="description" className="flex-1" hint="Optional" />
       <Button type="submit" busy={pending}>
         <Plus className="h-4 w-4" />

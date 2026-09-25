@@ -21,6 +21,7 @@ export interface AppUser {
   full_name: string | null;
   phone: string | null;
   last_tenant_id: string | null;
+  signature_image: string | null;
   created_at: string;
 }
 
@@ -395,6 +396,7 @@ export interface ContractParty {
   token_expires_at: string | null;
   signed_name: string | null;
   signed_title: string | null;
+  signature_image: string | null;
   ip_address: string | null;
   user_agent: string | null;
   viewed_at: string | null;

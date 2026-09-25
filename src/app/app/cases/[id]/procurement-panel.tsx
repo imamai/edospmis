@@ -204,7 +204,7 @@ export function ProcurementPanel({
             <div className="mt-3">
               {sourcing ? (
                 <div className="flex flex-col gap-2 rounded-lg border border-line p-3 sm:flex-row sm:items-end sm:flex-wrap">
-                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} className="flex-1" />
+                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} hint=" " className="flex-1" />
                   <TextInput label="Email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} hint="Optional" className="flex-1" />
                   <TextInput label="Phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} hint="Optional, for WhatsApp" className="flex-1" />
                   <div className="flex items-center gap-2">

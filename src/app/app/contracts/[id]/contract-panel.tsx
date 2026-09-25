@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckboxRow, SelectInput, TextArea, TextInput } from "@/components/ui/field";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import { formatDate } from "@/lib/utils";
 import type { Contract, ContractEvent, ContractParty, ContractPartyRole, ContractPartyStatus } from "@/lib/database.types";
 
@@ -40,6 +41,7 @@ export function ContractPanel({
   canSend,
   canVoid,
   defaultSignerName,
+  savedSignature,
 }: {
   contract: Contract;
   parties: ContractParty[];
@@ -48,6 +50,7 @@ export function ContractPanel({
   canSend: boolean;
   canVoid: boolean;
   defaultSignerName: string;
+  savedSignature: string | null;
 }) {
   const router = useRouter();
   const isDraft = contract.status === "draft";
@@ -71,6 +74,8 @@ export function ContractPanel({
   const [signName, setSignName] = useState(defaultSignerName);
   const [signTitle, setSignTitle] = useState("");
   const [signConsented, setSignConsented] = useState(false);
+  const [signImage, setSignImage] = useState<string | null>(savedSignature);
+  const [redrawing, setRedrawing] = useState(!savedSignature);
   const [signPending, startSign] = useTransition();
   const [signError, setSignError] = useState<string | null>(null);
 
@@ -120,8 +125,12 @@ export function ContractPanel({
   }
 
   function submitTenantSignature() {
+    if (!signImage) {
+      setSignError("Draw or upload your signature before continuing.");
+      return;
+    }
     startSign(async () => {
-      const result = await signAsTenant(contract.id, signingPartyId!, signName, signTitle, signConsented);
+      const result = await signAsTenant(contract.id, signingPartyId!, signName, signTitle, signConsented, signImage);
       if (result.error) setSignError(result.error);
       else {
         setSigningPartyId(null);
@@ -225,8 +234,24 @@ export function ContractPanel({
                     <div className="rounded-lg border border-line bg-surface-sunk p-3">
                       {signingPartyId === p.id ? (
                         <div className="flex flex-col gap-3">
-                          <TextInput label="Your full name" value={signName} onChange={(e) => setSignName(e.target.value)} />
+                          <TextInput label="Your full name" value={signName} onChange={(e) => setSignName(e.target.value)} hint=" " />
                           <TextInput label="Title / position" value={signTitle} onChange={(e) => setSignTitle(e.target.value)} hint="Optional" />
+                          <div>
+                            <p className="mb-1.5 text-sm font-medium text-ink">Signature</p>
+                            {signImage && !redrawing ? (
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex h-[90px] w-full max-w-sm items-center rounded-lg border border-line-strong bg-white p-2">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={signImage} alt="Your signature" className="max-h-full max-w-full object-contain" />
+                                </div>
+                                <button type="button" onClick={() => setRedrawing(true)} className="self-start text-xs font-semibold text-ink-faint hover:text-brand">
+                                  Use a different signature
+                                </button>
+                              </div>
+                            ) : (
+                              <SignaturePad onChange={setSignImage} className="max-w-sm" />
+                            )}
+                          </div>
                           <CheckboxRow
                             label="I agree to sign this electronically"
                             checked={signConsented}
@@ -291,13 +316,14 @@ export function ContractPanel({
                 label="Role"
                 value={partyRole}
                 onChange={(e) => setPartyRole(e.target.value as ContractPartyRole)}
+                hint=" "
                 className="sm:w-40"
               >
                 <option value="client_signer">Client signer</option>
                 <option value="tenant_signer">Countersigner</option>
                 <option value="witness">Witness</option>
               </SelectInput>
-              <TextInput label="Name" value={partyName} onChange={(e) => setPartyName(e.target.value)} className="flex-1" />
+              <TextInput label="Name" value={partyName} onChange={(e) => setPartyName(e.target.value)} hint=" " className="flex-1" />
               <TextInput label="Email" value={partyEmail} onChange={(e) => setPartyEmail(e.target.value)} hint="Optional" className="flex-1" />
               <TextInput
                 label="Phone"

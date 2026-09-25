@@ -45,6 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       name: p.signed_name ? `${p.signed_name}${p.signed_title ? ` (${p.signed_title})` : ""}` : p.name,
       status: p.status,
       when: p.signed_at ? formatDate(p.signed_at) : null,
+      imageDataUrl: p.signature_image,
     })),
     signatureNote: parties.some((p) => p.consented_electronic)
       ? "Signatures above were captured electronically: each signer typed their full name, affirmatively consented to sign electronically, and had the timestamp (and, for external signers, IP address) recorded against their signature."

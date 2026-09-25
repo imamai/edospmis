@@ -11,8 +11,10 @@ export interface SignFormState {
 export async function submitSignature(token: string, _prev: SignFormState, form: FormData): Promise<SignFormState> {
   const signedName = String(form.get("signed_name") ?? "").trim();
   const signedTitle = String(form.get("signed_title") ?? "").trim();
+  const signatureImage = String(form.get("signature_image") ?? "").trim();
   const consented = form.get("consented") === "on";
   if (!signedName) return { error: "Enter your full name." };
+  if (!signatureImage) return { error: "Draw or upload your signature before continuing." };
   if (!consented) return { error: "Confirm you agree to sign this electronically." };
 
   const h = await headers();
@@ -27,6 +29,7 @@ export async function submitSignature(token: string, _prev: SignFormState, form:
     p_consented: consented,
     p_ip: ip || null,
     p_user_agent: userAgent || null,
+    p_signature_image: signatureImage,
   });
   if (error) return { error: error.message };
 

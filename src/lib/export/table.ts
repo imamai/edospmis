@@ -148,7 +148,8 @@ export function latin(text: string): string {
     .replace(/[“”]/g, '"')
     .replace(/[–—]/g, "-")
     .replace(/…/g, "...")
-    .replace(/[^\x20-\xff]/g, "?");
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\x20-\xff\n]/g, "?");
 }
 
 const BRAND = [29, 53, 87] as const; // #1d3557

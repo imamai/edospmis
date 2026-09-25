@@ -29,6 +29,7 @@ export interface DocumentSignature {
   name: string;
   status: string;
   when: string | null;
+  imageDataUrl?: string | null;
 }
 
 export interface DocumentExport {
@@ -251,6 +252,34 @@ export function documentPdf(d: DocumentExport): Uint8Array {
       y += 18;
     });
     y += 10;
+
+    const withImages = d.signatures.filter((s) => s.imageDataUrl);
+    if (withImages.length > 0) {
+      const boxW = usable / withImages.length - 10;
+      const boxH = 56;
+      ensureSpace(boxH + 24);
+      withImages.forEach((s, i) => {
+        const x = margin + i * (boxW + 10);
+        doc.setDrawColor(...FAINT);
+        doc.setLineWidth(0.5);
+        doc.rect(x, y, boxW, boxH);
+        const format = s.imageDataUrl!.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        try {
+          doc.addImage(s.imageDataUrl!, format, x + 4, y + 4, boxW - 8, boxH - 8, undefined, "FAST");
+        } catch {
+          // A malformed data URL should never take down the whole export.
+        }
+      });
+      y += boxH + 4;
+      withImages.forEach((s, i) => {
+        const x = margin + i * (boxW + 10);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...FAINT);
+        doc.text(latin(`${s.name} — ${s.role}`), x, y);
+      });
+      y += 16;
+    }
   }
 
   if (d.signatureNote) {

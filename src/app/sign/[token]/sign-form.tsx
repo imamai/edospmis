@@ -4,16 +4,23 @@ import { useActionState, useState } from "react";
 import { submitSignature, declineSignature, type SignFormState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { CheckboxRow, TextInput } from "@/components/ui/field";
+import { SignaturePad } from "@/components/ui/signature-pad";
 
 const initial: SignFormState = { error: null };
 
 export function SignForm({ token, defaultName }: { token: string; defaultName: string }) {
   const [state, action, pending] = useActionState(submitSignature.bind(null, token), initial);
+  const [signatureImage, setSignatureImage] = useState<string | null>(null);
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      <TextInput label="Your full name" name="signed_name" defaultValue={defaultName} required autoFocus />
+      <input type="hidden" name="signature_image" value={signatureImage ?? ""} />
+      <TextInput label="Your full name" name="signed_name" defaultValue={defaultName} hint=" " required autoFocus />
       <TextInput label="Title / position" name="signed_title" hint="Optional — e.g. Managing Director" />
+      <div>
+        <p className="mb-1.5 text-sm font-medium text-ink">Signature</p>
+        <SignaturePad onChange={setSignatureImage} />
+      </div>
       <CheckboxRow
         name="consented"
         label="I agree to sign this document electronically"
@@ -25,7 +32,7 @@ export function SignForm({ token, defaultName }: { token: string; defaultName: s
         </p>
       )}
       <div>
-        <Button type="submit" busy={pending}>
+        <Button type="submit" busy={pending} disabled={!signatureImage}>
           {pending ? "Signing" : "Sign & submit"}
         </Button>
       </div>

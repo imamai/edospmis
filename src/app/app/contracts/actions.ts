@@ -124,16 +124,24 @@ export async function signAsTenant(
   signedName: string,
   signedTitle: string,
   consented: boolean,
+  signatureImage: string | null,
 ): Promise<ContractFormState> {
-  await requireSession();
+  const session = await requireSession();
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_record_contract_signature", {
     p_party_id: partyId,
     p_signed_name: signedName,
     p_signed_title: signedTitle || null,
     p_consented: consented,
+    p_signature_image: signatureImage,
   });
   if (error) return { error: error.message, ok: null };
+
+  // Saved automatically so the next contract this person countersigns
+  // already has it — a one-time draw, not a per-contract chore.
+  if (signatureImage && signatureImage !== session.user.signature_image) {
+    await supabase.from("edospmis_users").update({ signature_image: signatureImage }).eq("id", session.user.id);
+  }
 
   revalidatePath(`/app/contracts/${contractId}`);
   return { error: null, ok: "Signed." };

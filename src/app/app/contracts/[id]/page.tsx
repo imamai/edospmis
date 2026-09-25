@@ -56,6 +56,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
         canSend={can(session, "legal.contract.send")}
         canVoid={can(session, "legal.contract.void")}
         defaultSignerName={session.user.full_name ?? session.user.email}
+        savedSignature={session.user.signature_image}
       />
     </div>
   );

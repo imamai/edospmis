@@ -27,7 +27,7 @@ export function DelegationForm({ myRoles, members }: { myRoles: RoleWithPermissi
 
   return (
     <form ref={formRef} action={action} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-      <SelectInput label="Role to delegate" name="role_id" required className="sm:flex-1">
+      <SelectInput label="Role to delegate" name="role_id" required className="sm:min-w-[12rem] sm:flex-1">
         <option value="">Choose a role you hold</option>
         {myRoles.map((r) => (
           <option key={r.id} value={r.id}>
@@ -35,7 +35,7 @@ export function DelegationForm({ myRoles, members }: { myRoles: RoleWithPermissi
           </option>
         ))}
       </SelectInput>
-      <SelectInput label="Delegate to" name="to_user_id" required className="sm:flex-1">
+      <SelectInput label="Delegate to" name="to_user_id" required className="sm:min-w-[12rem] sm:flex-1">
         <option value="">Choose a teammate</option>
         {members.map((m) => (
           <option key={m.user_id} value={m.user_id}>
@@ -43,8 +43,8 @@ export function DelegationForm({ myRoles, members }: { myRoles: RoleWithPermissi
           </option>
         ))}
       </SelectInput>
-      <TextInput label="From" name="starts_at" type="datetime-local" required />
-      <TextInput label="Until" name="ends_at" type="datetime-local" required />
+      <TextInput label="From" name="starts_at" type="datetime-local" required className="sm:min-w-[11rem]" />
+      <TextInput label="Until" name="ends_at" type="datetime-local" required className="sm:min-w-[11rem]" />
       <Button type="submit" size="sm" busy={pending}>
         Delegate
       </Button>

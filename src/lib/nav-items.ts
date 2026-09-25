@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, Building2, ClipboardList, FileSignature, Gauge, Gavel, LayoutDashboard, LineChart, Scale, ShieldCheck, Sparkles, Tags, Truck, UserCog, Users, Webhook } from "lucide-react";
+import { BarChart3, Building2, ClipboardList, FileSignature, Gauge, Gavel, LayoutDashboard, LineChart, PenTool, Scale, ShieldCheck, Sparkles, Tags, Truck, UserCog, Users, Webhook } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -17,6 +17,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/app/contracts", label: "Contracts", icon: FileSignature, requires: "legal.contract.view" },
   { href: "/app/analytics", label: "Analytics", icon: LineChart, requires: "reports.view" },
   { href: "/app/reports", label: "Reports", icon: BarChart3, requires: "reports.view" },
+  { href: "/app/settings/signature", label: "My signature", icon: PenTool },
   { href: "/app/settings/users", label: "Users", icon: Users, requires: "admin.users.manage" },
   { href: "/app/settings/roles", label: "Roles", icon: ShieldCheck, requires: "admin.roles.manage" },
   { href: "/app/settings/approval-rules", label: "Approval Rules", icon: Gavel, requires: "admin.approvals.manage" },
