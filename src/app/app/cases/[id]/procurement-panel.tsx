@@ -2,11 +2,11 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { inviteSupplierToRfq, recordQuotation, awardPO, type ProcurementState } from "../../procurement/actions";
+import { inviteSupplierToRfq, recordQuotation, awardPO, approvePO, type ProcurementState } from "../../procurement/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { NumberInput, SelectInput, TextArea } from "@/components/ui/field";
+import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { Supplier } from "@/lib/database.types";
@@ -18,11 +18,13 @@ export function ProcurementPanel({
   suppliers,
   canInvite,
   canAward,
+  canApprovePO,
 }: {
   detail: ProcurementDetail;
   suppliers: Supplier[];
   canInvite: boolean;
   canAward: boolean;
+  canApprovePO: boolean;
 }) {
   const router = useRouter();
   const { rfq, invitedSupplierIds, quotations, po } = detail;
@@ -34,8 +36,11 @@ export function ProcurementPanel({
   const [quoteState, quoteAction, quotePending] = useActionState(recordQuotation, initialQuotation);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
+  const [expectedDelivery, setExpectedDelivery] = useState("");
   const [awardPending, startAward] = useTransition();
   const [awardError, setAwardError] = useState<string | null>(null);
+  const [approvePending, startApprovePO] = useTransition();
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (quoteState.ok) router.refresh();
@@ -54,8 +59,17 @@ export function ProcurementPanel({
 
   function confirmAward(quotationId: string) {
     startAward(async () => {
-      const result = await awardPO(rfq.id, rfq.case_id, quotationId, awardNotes);
+      const result = await awardPO(rfq.id, rfq.case_id, quotationId, awardNotes, expectedDelivery || null);
       if (result.error) setAwardError(result.error);
+      else router.refresh();
+    });
+  }
+
+  function approveThisPO() {
+    if (!po) return;
+    startApprovePO(async () => {
+      const result = await approvePO(po.id, rfq.case_id);
+      if (result.error) setApproveError(result.error);
       else router.refresh();
     });
   }
@@ -65,10 +79,25 @@ export function ProcurementPanel({
       <Card>
         <CardHeader title="Purchase order" subtitle={po.po_number} />
         <CardBody className="flex flex-col gap-2 text-sm">
-          <p className="text-ink">
-            Awarded for <span className="font-semibold tnum">{formatMoney(po.total_cents, { currency: po.currency })}</span>
+          <div className="flex items-center gap-2">
+            <p className="text-ink">
+              {po.status === "pending_approval" ? "Awaiting approval, for" : "Awarded for"}{" "}
+              <span className="font-semibold tnum">{formatMoney(po.total_cents, { currency: po.currency })}</span>
+            </p>
+            {po.status === "pending_approval" && <Badge tone="attention">pending approval</Badge>}
+          </div>
+          <p className="text-xs text-ink-faint">
+            Issued {formatDate(po.issued_at)}
+            {po.expected_delivery_date ? ` · expected delivery ${formatDate(po.expected_delivery_date)}` : ""}
           </p>
-          <p className="text-xs text-ink-faint">Issued {formatDate(po.issued_at)}</p>
+          {po.status === "pending_approval" && canApprovePO && (
+            <div className="flex flex-col items-start gap-1 pt-1">
+              <Button size="sm" busy={approvePending} onClick={approveThisPO}>
+                Approve purchase order
+              </Button>
+              {approveError && <p className="text-xs text-critical">{approveError}</p>}
+            </div>
+          )}
         </CardBody>
       </Card>
     );
@@ -157,6 +186,15 @@ export function ProcurementPanel({
                   {canAward &&
                     (awardingId === q.id ? (
                       <div className="flex flex-col items-end gap-1.5">
+                        <TextInput
+                          label=""
+                          aria-label="Expected delivery date"
+                          type="date"
+                          value={expectedDelivery}
+                          onChange={(e) => setExpectedDelivery(e.target.value)}
+                          hint="Expected delivery — optional"
+                          className="w-56"
+                        />
                         <TextArea label="" aria-label="Award notes" value={awardNotes} onChange={(e) => setAwardNotes(e.target.value)} hint="Optional note" className="w-56" rows={2} />
                         <div className="flex gap-2">
                           <Button size="sm" busy={awardPending} onClick={() => confirmAward(q.id)}>

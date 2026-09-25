@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { requireSession, can } from "@/lib/data/session";
 import { getCaseDetail } from "@/lib/data/cases";
 import { getProcurementDetail, getSuppliers } from "@/lib/data/procurement";
+import { getFulfilmentDetail } from "@/lib/data/fulfilment";
+import { getFinanceDetail } from "@/lib/data/finance";
+import { getStageDurations, getCurrentStageDueAt } from "@/lib/data/cases";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkflowStepper } from "@/components/app/workflow-stepper";
@@ -10,6 +13,13 @@ import { ApprovalPanel } from "./approval-panel";
 import { SubmitButton } from "./submit-button";
 import { StartProcurementButton } from "./start-procurement-button";
 import { ProcurementPanel } from "./procurement-panel";
+import { ReceivingPanel } from "./receiving-panel";
+import { DeliveryPanel } from "./delivery-panel";
+import { FinancePanel } from "./finance-panel";
+import { StageTimingCard } from "./stage-timing-card";
+import { HoldBlockedControls } from "./hold-blocked-controls";
+import { CancelCaseButton } from "./cancel-case-button";
+import { CloseCaseButton } from "./close-case-button";
 
 const STATUS_TONE = {
   draft: "neutral",
@@ -20,7 +30,12 @@ const STATUS_TONE = {
   returned: "attention",
   cancelled: "neutral",
   procurement: "info",
+  po_approval: "attention",
   awarded: "good",
+  receiving: "info",
+  finance: "info",
+  delivery: "info",
+  closed: "good",
 } as const;
 
 const TERMINAL_LABEL: Record<string, string> = {
@@ -43,12 +58,25 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const sla = pendingApproval ? slaStatus(pendingTaskDueAt) : null;
 
   const showStartProcurement = c.status === "approved" && can(session, "procurement.rfq.create");
-  const inProcurement = c.status === "procurement" || c.status === "awarded";
-  const procurementDetail = inProcurement ? await getProcurementDetail(session.tenant.id, c.id) : null;
-  const suppliers = inProcurement ? await getSuppliers(session.tenant.id) : [];
+  const pastProcurement = ["procurement", "po_approval", "awarded", "receiving", "finance", "delivery", "closed"].includes(c.status);
+  const procurementDetail = pastProcurement ? await getProcurementDetail(session.tenant.id, c.id) : null;
+  const suppliers = c.status === "procurement" ? await getSuppliers(session.tenant.id) : [];
+
+  const hasPO = !!procurementDetail?.po;
+  const poIssued = hasPO && procurementDetail!.po!.status !== "pending_approval";
+  const fulfilmentDetail = poIssued ? await getFulfilmentDetail(session.tenant.id, c.id) : null;
+  const financeDetail = poIssued ? await getFinanceDetail(session.tenant.id, c.id) : null;
+  const canClose = can(session, "procurement.case.close") && !["closed", "rejected", "returned", "cancelled"].includes(c.status);
+  const canCancel = can(session, "procurement.pr.cancel") && !["closed", "rejected", "returned", "cancelled"].includes(c.status);
+  const canHold = can(session, "procurement.case.hold");
+
+  const stageDurations = await getStageDurations(session.tenant.id, c.id);
+  const currentStage = stageDurations[stageDurations.length - 1];
+  const currentStageDueAt = currentStage ? await getCurrentStageDueAt(session.tenant.id, c.current_stage_key, currentStage.entered_at) : null;
+  const currentStageSla = currentStageDueAt ? slaStatus(currentStageDueAt) : null;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{c.case_number}</p>
@@ -59,9 +87,42 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             {clientName && <Badge tone="brand">{clientName}</Badge>}
           </div>
         </div>
-        {canSubmit && <SubmitButton caseId={c.id} prId={pr.id} />}
-        {showStartProcurement && <StartProcurementButton caseId={c.id} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {canSubmit && <SubmitButton caseId={c.id} prId={pr.id} />}
+          {showStartProcurement && <StartProcurementButton caseId={c.id} />}
+          {canClose && (
+            <CloseCaseButton
+              caseId={c.id}
+              nudge={
+                clientName && fulfilmentDetail && !fulfilmentDetail.delivery?.client_confirmed_at
+                  ? "Delivery isn't confirmed yet — you can still close if this case doesn't need one."
+                  : financeDetail?.invoice && financeDetail.invoice.status !== "paid"
+                    ? "Payment hasn't been recorded yet — you can still close if this case doesn't need it."
+                    : null
+              }
+            />
+          )}
+          {canCancel && <CancelCaseButton caseId={c.id} />}
+        </div>
       </div>
+
+      {canHold && (
+        <HoldBlockedControls caseId={c.id} onHold={c.on_hold} onHoldReason={c.on_hold_reason} blocked={c.blocked} blockedReason={c.blocked_reason} />
+      )}
+      {!canHold && (c.on_hold || c.blocked) && (
+        <div className="flex flex-col gap-1.5">
+          {c.on_hold && (
+            <p className="rounded-lg border border-attention/30 bg-attention-soft px-3 py-2 text-sm text-attention">
+              On hold{c.on_hold_reason ? ` — ${c.on_hold_reason}` : ""}
+            </p>
+          )}
+          {c.blocked && (
+            <p className="rounded-lg border border-critical/30 bg-critical-soft px-3 py-2 text-sm text-critical">
+              Blocked{c.blocked_reason ? ` — ${c.blocked_reason}` : ""}
+            </p>
+          )}
+        </div>
+      )}
 
       <Card>
         <CardBody>
@@ -164,7 +225,59 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           suppliers={suppliers}
           canInvite={can(session, "procurement.rfq.send")}
           canAward={can(session, "procurement.po.issue")}
+          canApprovePO={can(session, "procurement.po.approve")}
         />
+      )}
+
+      {poIssued && fulfilmentDetail && (
+        <ReceivingPanel
+          caseId={c.id}
+          poItems={procurementDetail!.po!.items}
+          detail={fulfilmentDetail}
+          canRecord={can(session, "receiving.grn.create")}
+          canInspect={can(session, "receiving.grn.approve")}
+        />
+      )}
+
+      {poIssued && financeDetail && (
+        <FinancePanel
+          caseId={c.id}
+          poItems={procurementDetail!.po!.items}
+          currency={procurementDetail!.po!.currency}
+          detail={financeDetail}
+          canSubmit={can(session, "finance.invoice.create")}
+          canApprove={can(session, "finance.invoice.approve")}
+          canRecordPayment={can(session, "finance.payment.approve")}
+        />
+      )}
+
+      {/* Delivery is outbound (this tenant -> its own client) — irrelevant
+          to a purely internal requisition, so it only shows up once a case
+          actually has a client attached. */}
+      {clientName && poIssued && fulfilmentDetail && (
+        <DeliveryPanel
+          caseId={c.id}
+          delivery={fulfilmentDetail.delivery}
+          canAssign={can(session, "delivery.assign")}
+          canDispatch={can(session, "delivery.dispatch")}
+          canComplete={can(session, "delivery.complete")}
+        />
+      )}
+
+      <StageTimingCard durations={stageDurations} />
+
+      {currentStageSla && currentStageSla.status !== "none" && (
+        <p
+          className={
+            currentStageSla.status === "breached"
+              ? "text-xs text-critical"
+              : currentStageSla.status === "warning"
+                ? "text-xs text-attention"
+                : "text-xs text-ink-faint"
+          }
+        >
+          Current stage SLA: {currentStageSla.label}
+        </p>
       )}
 
       {sla && sla.status !== "none" && (

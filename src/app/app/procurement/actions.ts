@@ -55,15 +55,31 @@ export async function recordQuotation(_prev: ProcurementState, form: FormData): 
   return { error: null, ok: "Quotation recorded." };
 }
 
-export async function awardPO(rfqId: string, caseId: string, quotationId: string, notes: string): Promise<ProcurementState> {
+export async function awardPO(
+  rfqId: string,
+  caseId: string,
+  quotationId: string,
+  notes: string,
+  expectedDeliveryDate: string | null,
+): Promise<ProcurementState> {
   await requireSession();
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_award_po", {
     p_rfq_id: rfqId,
     p_quotation_id: quotationId,
     p_notes: notes || null,
+    p_expected_delivery_date: expectedDeliveryDate || null,
   });
   if (error) return { error: error.message, ok: null };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order issued." };
+}
+
+export async function approvePO(poId: string, caseId: string): Promise<ProcurementState> {
+  await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_approve_po", { p_po_id: poId });
+  if (error) return { error: error.message, ok: null };
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: "Purchase order approved." };
 }

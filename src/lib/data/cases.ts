@@ -3,6 +3,49 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Approval, ApprovalRule, Case, MyWorkItem, PR, Priority, WorkflowStageDef } from "@/lib/database.types";
 
+export interface StageDuration {
+  stage_key: string;
+  entered_at: string;
+  left_at: string | null;
+  minutes: number;
+}
+
+/** How long a case spent (or has so far spent) in each stage it has passed
+ *  through — the same "days from X to Y" metric the client's own Excel
+ *  turnaround-time report already tracks manually, computed live here. */
+export async function getStageDurations(tenantId: string, caseId: string): Promise<StageDuration[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("edospmis_case_stage_history")
+    .select("stage_key, entered_at, left_at")
+    .eq("tenant_id", tenantId)
+    .eq("case_id", caseId)
+    .order("entered_at");
+
+  const now = Date.now();
+  return (data ?? []).map((r) => ({
+    stage_key: r.stage_key,
+    entered_at: r.entered_at,
+    left_at: r.left_at,
+    minutes: Math.round(((r.left_at ? new Date(r.left_at).getTime() : now) - new Date(r.entered_at).getTime()) / 60000),
+  }));
+}
+
+/** The current stage's SLA due timestamp, if the tenant has configured one
+ *  for it — `edospmis_sla_policies` was always generic per stage_key; only
+ *  the approval stage ever had a row until a tenant adds more. */
+export async function getCurrentStageDueAt(tenantId: string, stageKey: string, stageEnteredAt: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data: policy } = await supabase
+    .from("edospmis_sla_policies")
+    .select("target_minutes")
+    .eq("tenant_id", tenantId)
+    .eq("stage_key", stageKey)
+    .maybeSingle();
+  if (!policy) return null;
+  return new Date(new Date(stageEnteredAt).getTime() + policy.target_minutes * 60000).toISOString();
+}
+
 export async function getMyPRs(tenantId: string, userId: string) {
   const supabase = await createClient();
   const { data: prs } = await supabase

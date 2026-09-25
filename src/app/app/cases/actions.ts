@@ -41,3 +41,35 @@ export async function decideApproval(
   const label = decision === "approved" ? "Approved." : decision === "rejected" ? "Rejected." : "Returned to requester.";
   return { error: null, ok: label };
 }
+
+export interface CaseActionState {
+  error: string | null;
+  ok: string | null;
+}
+
+export async function cancelCase(caseId: string, reason: string): Promise<CaseActionState> {
+  await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_cancel_case", { p_case_id: caseId, p_reason: reason || null });
+  if (error) return { error: error.message, ok: null };
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: "Case cancelled." };
+}
+
+export async function setCaseHold(caseId: string, onHold: boolean, reason: string): Promise<CaseActionState> {
+  await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_set_case_hold", { p_case_id: caseId, p_on_hold: onHold, p_reason: reason || null });
+  if (error) return { error: error.message, ok: null };
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: onHold ? "Case put on hold." : "Hold released." };
+}
+
+export async function setCaseBlocked(caseId: string, blocked: boolean, reason: string): Promise<CaseActionState> {
+  await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_set_case_blocked", { p_case_id: caseId, p_blocked: blocked, p_reason: reason || null });
+  if (error) return { error: error.message, ok: null };
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: blocked ? "Case marked blocked." : "Block cleared." };
+}

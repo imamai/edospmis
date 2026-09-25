@@ -11,6 +11,7 @@ export interface Tenant {
   branding: Record<string, unknown>;
   numbering_format: string;
   case_sequence: number;
+  requires_po_approval: boolean;
   created_at: string;
 }
 
@@ -113,7 +114,12 @@ export type CaseStatus =
   | "returned"
   | "cancelled"
   | "procurement"
-  | "awarded";
+  | "po_approval"
+  | "awarded"
+  | "receiving"
+  | "finance"
+  | "delivery"
+  | "closed";
 export type PRStatus = "draft" | "submitted" | "approved" | "rejected" | "returned" | "cancelled";
 export type Priority = "low" | "normal" | "high" | "urgent";
 export type ApprovalDecision = "pending" | "approved" | "rejected" | "returned";
@@ -156,6 +162,19 @@ export interface Case {
   created_by: string | null;
   opened_at: string;
   closed_at: string | null;
+  on_hold: boolean;
+  on_hold_reason: string | null;
+  blocked: boolean;
+  blocked_reason: string | null;
+}
+
+export interface CaseStageHistory {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  stage_key: string;
+  entered_at: string;
+  left_at: string | null;
 }
 
 export interface PR {
@@ -241,7 +260,7 @@ export interface MyWorkItem {
  * ------------------------------------------------------------------ */
 
 export type RfqStatus = "open" | "closed" | "cancelled";
-export type POStatus = "issued" | "cancelled";
+export type POStatus = "pending_approval" | "issued" | "cancelled";
 
 export interface Supplier {
   id: string;
@@ -300,6 +319,7 @@ export interface PurchaseOrder {
   total_cents: number;
   currency: string;
   status: POStatus;
+  expected_delivery_date: string | null;
   issued_by: string | null;
   issued_at: string;
   created_at: string;
@@ -339,5 +359,167 @@ export interface ContractParty {
   email: string | null;
   status: ContractPartyStatus;
   signed_at: string | null;
+  created_at: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Phase 4 — Fulfilment: GRN / Inspection / Delivery / Case closure
+ * ------------------------------------------------------------------ */
+
+export type GrnStatus = "recorded" | "inspected";
+export type GrnItemCondition = "accepted" | "rejected" | "damaged" | "short" | "over";
+export type InspectionResult = "pass" | "fail" | "conditional";
+export type DeliveryStatus = "scheduled" | "dispatched" | "delivered" | "confirmed" | "cancelled";
+export type ProofType = "signature" | "photo" | "otp" | "none";
+
+export interface GrnItem {
+  id: string;
+  grn_id: string;
+  description: string;
+  unit: string | null;
+  ordered_qty: number;
+  received_qty: number;
+  condition: GrnItemCondition;
+  notes: string | null;
+}
+
+export interface Grn {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  po_id: string;
+  grn_number: string;
+  status: GrnStatus;
+  notes: string | null;
+  received_by: string | null;
+  received_at: string;
+  created_at: string;
+}
+
+export interface Inspection {
+  id: string;
+  tenant_id: string;
+  grn_id: string;
+  result: InspectionResult;
+  comments: string | null;
+  evidence_ref: string | null;
+  inspected_by: string | null;
+  inspected_at: string;
+}
+
+export interface Delivery {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  status: DeliveryStatus;
+  scheduled_at: string | null;
+  dispatched_at: string | null;
+  delivered_at: string | null;
+  proof_type: ProofType | null;
+  proof_ref: string | null;
+  client_confirmed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Phase 5 — Finance (Invoice + Three-Way Match) + Advanced Controls
+ * ------------------------------------------------------------------ */
+
+export type InvoiceStatus = "submitted" | "matched" | "exception" | "approved" | "paid" | "void";
+export type MatchExceptionType = "quantity_mismatch" | "price_mismatch" | "missing_grn";
+export type MatchExceptionStatus = "open" | "resolved";
+
+export interface InvoiceItem {
+  description: string;
+  qty: number;
+  unit: string;
+  unit_cost_cents: number;
+}
+
+export interface Invoice {
+  id: string;
+  tenant_id: string;
+  case_id: string;
+  po_id: string;
+  supplier_id: string;
+  invoice_number: string;
+  items: InvoiceItem[];
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  currency: string;
+  payment_terms: string | null;
+  due_date: string | null;
+  status: InvoiceStatus;
+  submitted_by: string | null;
+  submitted_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  payment_reference: string | null;
+  created_at: string;
+}
+
+export interface MatchException {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  po_id: string;
+  grn_id: string | null;
+  exception_type: MatchExceptionType;
+  detail: string;
+  status: MatchExceptionStatus;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+}
+
+export interface SodSettings {
+  tenant_id: string;
+  pr_requester_not_approver: boolean;
+  receiver_not_payment_approver: boolean;
+}
+
+export interface Delegation {
+  id: string;
+  tenant_id: string;
+  role_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  starts_at: string;
+  ends_at: string;
+  created_by: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Phase 7 — Integrations: webhooks + accounting export
+ * ------------------------------------------------------------------ */
+
+export interface Webhook {
+  id: string;
+  tenant_id: string;
+  url: string;
+  secret: string;
+  event_prefixes: string[];
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  tenant_id: string;
+  event: string;
+  payload: Record<string, unknown>;
+  request_id: number | null;
+  response_status: number | null;
+  response_body: string | null;
+  checked_at: string | null;
   created_at: string;
 }
