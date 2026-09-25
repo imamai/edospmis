@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Copy, Mail, Check } from "lucide-react";
+import { Trash2, Copy, Mail, Check, AlertTriangle } from "lucide-react";
 import {
   addContractParty,
   removeContractParty,
@@ -74,7 +74,7 @@ export function ContractPanel({
   const [signPending, startSign] = useTransition();
   const [signError, setSignError] = useState<string | null>(null);
 
-  const [shareMsg, setShareMsg] = useState<Record<string, string>>({});
+  const [shareMsg, setShareMsg] = useState<Record<string, { text: string; error: boolean }>>({});
   const [sharePending, startShare] = useTransition();
 
   const [voiding, setVoiding] = useState(false);
@@ -134,15 +134,15 @@ export function ContractPanel({
   function copyLink(token: string, partyId: string) {
     const link = `${process.env.NEXT_PUBLIC_SITE_URL}/sign/${token}`;
     navigator.clipboard.writeText(link).then(() => {
-      setShareMsg((m) => ({ ...m, [partyId]: "Copied." }));
-      setTimeout(() => setShareMsg((m) => ({ ...m, [partyId]: "" })), 2000);
+      setShareMsg((m) => ({ ...m, [partyId]: { text: "Copied.", error: false } }));
+      setTimeout(() => setShareMsg((m) => ({ ...m, [partyId]: { text: "", error: false } })), 2000);
     });
   }
 
   function emailLink(partyId: string) {
     startShare(async () => {
       const result = await shareContractLink(contract.id, partyId);
-      setShareMsg((m) => ({ ...m, [partyId]: result.error ?? result.ok ?? "" }));
+      setShareMsg((m) => ({ ...m, [partyId]: { text: result.error ?? result.ok ?? "", error: Boolean(result.error) } }));
     });
   }
 
@@ -272,10 +272,10 @@ export function ContractPanel({
                           WhatsApp
                         </a>
                       )}
-                      {shareMsg[p.id] && (
-                        <span className="inline-flex items-center gap-1 text-xs text-ink-faint">
-                          <Check className="h-3 w-3" />
-                          {shareMsg[p.id]}
+                      {shareMsg[p.id]?.text && (
+                        <span className={`inline-flex items-center gap-1 text-xs ${shareMsg[p.id].error ? "text-critical" : "text-ink-faint"}`}>
+                          {shareMsg[p.id].error ? <AlertTriangle className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                          {shareMsg[p.id].text}
                         </span>
                       )}
                     </div>
