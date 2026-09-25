@@ -1,5 +1,6 @@
 import { requireSession, can } from "@/lib/data/session";
 import { getCategories, getClients } from "@/lib/data/reference";
+import { modelAvailable } from "@/lib/ai/suggest";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PRForm } from "./pr-form";
 
@@ -19,7 +20,7 @@ export default async function NewPRPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-2xl lg:max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-4xl">
       <div className="mb-5">
         <h1 className="text-xl font-semibold text-ink">New request</h1>
         <p className="mt-1 text-sm text-ink-faint">This opens a new case, tracked from here through approval.</p>
@@ -27,7 +28,7 @@ export default async function NewPRPage() {
       <Card>
         <CardHeader title="Purchase requisition" />
         <CardBody>
-          <PRForm categories={categories} clients={clients} />
+          <PRForm categories={categories} clients={clients} aiAvailable={modelAvailable()} />
         </CardBody>
       </Card>
     </div>

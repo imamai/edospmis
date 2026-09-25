@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { ClipboardList, Plus } from "lucide-react";
+import { AlertTriangle, ClipboardList, Inbox, Plus, TriangleAlert, Wallet } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getMyWork } from "@/lib/data/cases";
+import { getAnalytics } from "@/lib/data/analytics";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { StatCard } from "@/components/ui/stat-card";
 import { formatMoney, slaStatus } from "@/lib/utils";
 
 export default async function HomePage() {
@@ -14,10 +16,14 @@ export default async function HomePage() {
   const firstName = session.user.full_name?.split(" ")[0] ?? "there";
 
   const roleIds = session.roles.map((r) => r.id);
-  const myWork = await getMyWork(session.tenant.id, roleIds);
+  const canSeeReports = can(session, "reports.view");
+  const [myWork, analytics] = await Promise.all([
+    getMyWork(session.tenant.id, roleIds),
+    canSeeReports ? getAnalytics(session.tenant.id) : Promise.resolve(null),
+  ]);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink">
@@ -36,6 +42,30 @@ export default async function HomePage() {
           </ButtonLink>
         )}
       </div>
+
+      {analytics && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard label="Open cases" value={String(analytics.aging.length)} icon={ClipboardList} tone="brand" />
+          <StatCard
+            label="Pending your decision"
+            value={String(myWork.length)}
+            icon={Inbox}
+            tone={myWork.length > 0 ? "attention" : "brand"}
+          />
+          <StatCard
+            label="At risk of SLA breach"
+            value={String(analytics.slaRisk.length)}
+            icon={analytics.slaRisk.length > 0 ? AlertTriangle : TriangleAlert}
+            tone={analytics.slaRisk.length > 0 ? "critical" : "brand"}
+          />
+          <StatCard
+            label="Estimated spend, open requests"
+            value={formatMoney(analytics.spendByCategory.reduce((sum, c) => sum + c.total_estimated_cents, 0))}
+            icon={Wallet}
+            tone="brand"
+          />
+        </div>
+      )}
 
       <Card>
         <CardHeader title="My Work" subtitle="Requests and approvals assigned to you" icon={<ClipboardList className="h-4 w-4" />} />

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { listConversations, loadMessages } from "@/lib/data/assistant";
@@ -24,7 +25,7 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
   const initial = activeId ? await loadMessages(activeId) : [];
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row">
       <div className="lg:w-56 lg:shrink-0">
         <ConversationList conversations={conversations} activeId={activeId} />
       </div>
@@ -36,9 +37,9 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
         {!modelAvailable() && (
           <p className="mb-3 rounded-lg border border-attention/25 bg-attention-soft px-3 py-2.5 text-sm text-attention">
             No model is configured for this workspace yet, so edos.ai can&rsquo;t answer questions right now — the{" "}
-            <a href="/app/reports" className="underline">
+            <Link href="/app/reports" className="underline">
               Reports
-            </a>{" "}
+            </Link>{" "}
             screen covers the same data in the meantime.
           </p>
         )}

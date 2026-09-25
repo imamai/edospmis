@@ -18,7 +18,7 @@ export default async function SuppliersPage() {
   const suppliers = await getSuppliers(session.tenant.id, true);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold text-ink">Suppliers</h1>
         <p className="mt-1 text-sm text-ink-faint">Who gets invited to quote on an RFQ.</p>
@@ -26,7 +26,7 @@ export default async function SuppliersPage() {
 
       <Card>
         <CardHeader title="Add a supplier" icon={<Truck className="h-4 w-4" />} />
-        <CardBody>
+        <CardBody className="max-w-2xl">
           <SupplierForm />
         </CardBody>
       </Card>

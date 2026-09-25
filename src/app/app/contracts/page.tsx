@@ -19,7 +19,7 @@ export default async function ContractsPage() {
   const contracts = await getContracts(session.tenant.id);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-ink">Contracts</h1>

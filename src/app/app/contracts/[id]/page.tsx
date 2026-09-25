@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { Download } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getContractDetail } from "@/lib/data/contracts";
 import { Badge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { ContractPanel } from "./contract-panel";
 
@@ -21,12 +23,20 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const { contract, parties, clientName } = detail;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          {contract.contract_type.replace("_", " ")}
-        </p>
-        <h1 className="mt-0.5 text-xl font-semibold text-ink">{contract.title}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              {contract.contract_type.replace("_", " ")}
+            </p>
+            <h1 className="mt-0.5 text-xl font-semibold text-ink">{contract.title}</h1>
+          </div>
+          <ButtonLink href={`/api/export/contract/${contract.id}`} variant="secondary" size="sm">
+            <Download className="h-4 w-4" />
+            Download PDF
+          </ButtonLink>
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Badge tone={STATUS_TONE[contract.status]}>{contract.status}</Badge>
           {contract.requires_witness && <Badge tone="attention">Requires witness</Badge>}

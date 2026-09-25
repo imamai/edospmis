@@ -18,7 +18,7 @@ export default async function CategoriesPage() {
   const categories = await getCategories(session.tenant.id, true);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold text-ink">Categories</h1>
         <p className="mt-1 text-sm text-ink-faint">
@@ -28,7 +28,7 @@ export default async function CategoriesPage() {
 
       <Card>
         <CardHeader title="Add a category" icon={<Tags className="h-4 w-4" />} />
-        <CardBody>
+        <CardBody className="max-w-2xl">
           <CategoryForm />
         </CardBody>
       </Card>

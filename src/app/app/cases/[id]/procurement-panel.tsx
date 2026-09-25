@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Download } from "lucide-react";
 import { inviteSupplierToRfq, recordQuotation, awardPO, approvePO, type ProcurementState } from "../../procurement/actions";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
@@ -77,7 +78,16 @@ export function ProcurementPanel({
   if (po) {
     return (
       <Card>
-        <CardHeader title="Purchase order" subtitle={po.po_number} />
+        <CardHeader
+          title="Purchase order"
+          subtitle={po.po_number}
+          action={
+            <ButtonLink href={`/api/export/po/${po.id}`} variant="secondary" size="sm">
+              <Download className="h-3.5 w-3.5" />
+              PDF
+            </ButtonLink>
+          }
+        />
         <CardBody className="flex flex-col gap-2 text-sm">
           <div className="flex items-center gap-2">
             <p className="text-ink">

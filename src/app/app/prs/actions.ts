@@ -4,11 +4,32 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { modelAvailable, suggestPRDetails, type PRSuggestion } from "@/lib/ai/suggest";
 import type { PRItem, Priority } from "@/lib/database.types";
 
 export interface PRFormState {
   error: string | null;
   ok: string | null;
+}
+
+export interface SimilarPR {
+  pr_id: string;
+  case_id: string;
+  case_number: string;
+  title: string;
+  status: string;
+  similarity: number;
+  created_at: string;
+}
+
+export interface DuplicateCheckState {
+  error: string | null;
+  matches: SimilarPR[] | null;
+}
+
+export interface SuggestState {
+  error: string | null;
+  suggestion: PRSuggestion | null;
 }
 
 function parseItems(form: FormData): PRItem[] {
@@ -89,6 +110,50 @@ export async function createPR(_prev: PRFormState, form: FormData): Promise<PRFo
   }
 
   redirect(`/app/cases/${newCase.id}`);
+}
+
+export async function findSimilarPRs(_prev: DuplicateCheckState, form: FormData): Promise<DuplicateCheckState> {
+  const session = await requireSession();
+  if (!can(session, "procurement.pr.create")) {
+    return { error: "You don't have permission to create requests.", matches: null };
+  }
+  const title = String(form.get("title") ?? "").trim();
+  if (title.length < 3) return { error: "Type a few more characters of the title first.", matches: null };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("edospmis_find_similar_prs", {
+    p_tenant_id: session.tenant.id,
+    p_title: title,
+    p_exclude_pr_id: null,
+  });
+  if (error) return { error: "Couldn't check for similar requests right now.", matches: null };
+  return { error: null, matches: (data as SimilarPR[]) ?? [] };
+}
+
+export async function suggestPRFromText(_prev: SuggestState, form: FormData): Promise<SuggestState> {
+  const session = await requireSession();
+  if (!can(session, "procurement.pr.create")) {
+    return { error: "You don't have permission to create requests.", suggestion: null };
+  }
+  if (!modelAvailable()) {
+    return { error: "AI suggestions aren't configured for this workspace yet.", suggestion: null };
+  }
+  const text = String(form.get("free_text") ?? "").trim();
+  if (!text) return { error: "Describe what you need first.", suggestion: null };
+
+  const supabase = await createClient();
+  const { data: categories } = await supabase
+    .from("edospmis_categories")
+    .select("name")
+    .eq("tenant_id", session.tenant.id)
+    .eq("is_active", true);
+
+  try {
+    const suggestion = await suggestPRDetails(text, (categories ?? []).map((c) => c.name));
+    return { error: null, suggestion };
+  } catch {
+    return { error: "Couldn't get a suggestion right now — fill it in yourself.", suggestion: null };
+  }
 }
 
 export async function submitPR(caseId: string, prId: string): Promise<PRFormState> {

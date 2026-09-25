@@ -76,7 +76,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const currentStageSla = currentStageDueAt ? slaStatus(currentStageDueAt) : null;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{c.case_number}</p>

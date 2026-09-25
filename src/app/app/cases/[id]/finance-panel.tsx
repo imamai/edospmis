@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Download, Plus, Trash2 } from "lucide-react";
 import {
   submitInvoice,
   resolveMatchException,
@@ -210,7 +211,16 @@ export function FinancePanel({
                   {formatMoney(invoice.total_cents, { currency: invoice.currency })} · submitted {formatDate(invoice.submitted_at)}
                 </p>
               </div>
-              <Badge tone={STATUS_TONE[invoice.status]}>{invoice.status}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone={STATUS_TONE[invoice.status]}>{invoice.status}</Badge>
+                <Link
+                  href={`/api/export/invoice/${invoice.id}`}
+                  className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PDF
+                </Link>
+              </div>
             </div>
 
             {invoice.exceptions.length > 0 && (

@@ -29,7 +29,7 @@ export default async function RolesPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold text-ink">Roles</h1>
         <p className="mt-1 text-sm text-ink-faint">

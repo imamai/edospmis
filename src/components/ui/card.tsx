@@ -7,15 +7,17 @@ import { cn } from "@/lib/utils";
  */
 export function Card({
   raised = false,
+  interactive = false,
   className,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { raised?: boolean }) {
+}: React.HTMLAttributes<HTMLDivElement> & { raised?: boolean; interactive?: boolean }) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-line bg-surface",
+        "rounded-xl border border-line bg-surface transition-all duration-200",
         raised ? "shadow-raised" : "shadow-card",
+        interactive && "hover:-translate-y-0.5 hover:shadow-raised",
         className,
       )}
       {...props}

@@ -25,7 +25,7 @@ export default async function DelegationsPage() {
   const myRoles = roles.filter((r) => myRoleIds.has(r.id));
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5 lg:max-w-4xl">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold text-ink">Delegations</h1>
         <p className="mt-1 text-sm text-ink-faint">
@@ -35,7 +35,7 @@ export default async function DelegationsPage() {
 
       <Card>
         <CardHeader title="New delegation" />
-        <CardBody>
+        <CardBody className="max-w-2xl">
           <DelegationForm myRoles={myRoles} members={members.filter((m) => m.user_id !== session.user.id)} />
         </CardBody>
       </Card>
