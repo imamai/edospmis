@@ -20,7 +20,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const detail = await getContractDetail(session.tenant.id, id);
   if (!detail) notFound();
 
-  const { contract, parties, clientName } = detail;
+  const { contract, parties, clientName, events } = detail;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
@@ -51,9 +51,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       <ContractPanel
         contract={contract}
         parties={parties}
+        events={events}
         canEdit={can(session, "legal.contract.edit")}
         canSend={can(session, "legal.contract.send")}
         canVoid={can(session, "legal.contract.void")}
+        defaultSignerName={session.user.full_name ?? session.user.email}
       />
     </div>
   );

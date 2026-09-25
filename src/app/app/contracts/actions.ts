@@ -4,12 +4,23 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/notify/email";
 import type { ContractPartyRole } from "@/lib/database.types";
 
 export interface ContractFormState {
   error: string | null;
   ok: string | null;
 }
+
+// The tenant pre-signs first, in-app, before the contract ever goes out —
+// that's what makes it a "pre-signed" contract by the time an external
+// party sees it. A witness attests the client's signature, so signs after
+// them. See ARCHITECTURE.md §4.6's enforced signing order.
+const SIGNING_ORDER: Record<ContractPartyRole, number> = {
+  tenant_signer: 1,
+  client_signer: 2,
+  witness: 3,
+};
 
 export async function createContract(_prev: ContractFormState, form: FormData): Promise<ContractFormState> {
   const session = await requireSession();
@@ -19,6 +30,7 @@ export async function createContract(_prev: ContractFormState, form: FormData): 
   const title = String(form.get("title") ?? "").trim();
   const contractType = String(form.get("contract_type") ?? "service_agreement");
   const clientId = String(form.get("client_id") ?? "") || null;
+  const templateId = String(form.get("template_id") ?? "") || null;
   const requiresWitness = form.get("requires_witness") === "on";
   const body = String(form.get("body") ?? "");
   if (!title) return { error: "Give the contract a title.", ok: null };
@@ -31,6 +43,7 @@ export async function createContract(_prev: ContractFormState, form: FormData): 
       title,
       contract_type: contractType,
       client_id: clientId,
+      template_id: templateId,
       requires_witness: requiresWitness,
       body,
       created_by: session.user.id,
@@ -65,6 +78,7 @@ export async function addContractParty(
   partyRole: ContractPartyRole,
   name: string,
   email: string,
+  phone: string,
 ): Promise<ContractFormState> {
   const session = await requireSession();
   if (!name.trim()) return { error: "Enter a name.", ok: null };
@@ -75,6 +89,8 @@ export async function addContractParty(
     party_role: partyRole,
     name: name.trim(),
     email: email.trim() || null,
+    phone: phone.trim() || null,
+    signing_order: SIGNING_ORDER[partyRole],
   });
   if (error) return { error: "Couldn't add that party.", ok: null };
 
@@ -102,14 +118,49 @@ export async function sendContract(contractId: string): Promise<ContractFormStat
   return { error: null, ok: "Contract sent." };
 }
 
-export async function recordContractSignature(contractId: string, partyId: string): Promise<ContractFormState> {
+export async function signAsTenant(
+  contractId: string,
+  partyId: string,
+  signedName: string,
+  signedTitle: string,
+  consented: boolean,
+): Promise<ContractFormState> {
   await requireSession();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_record_contract_signature", { p_party_id: partyId });
+  const { error } = await supabase.rpc("edospmis_record_contract_signature", {
+    p_party_id: partyId,
+    p_signed_name: signedName,
+    p_signed_title: signedTitle || null,
+    p_consented: consented,
+  });
   if (error) return { error: error.message, ok: null };
 
   revalidatePath(`/app/contracts/${contractId}`);
-  return { error: null, ok: "Signature recorded." };
+  return { error: null, ok: "Signed." };
+}
+
+export async function shareContractLink(contractId: string, partyId: string): Promise<ContractFormState> {
+  const session = await requireSession();
+  const supabase = await createClient();
+  const { data: contract } = await supabase.from("edospmis_contracts").select("title").eq("id", contractId).maybeSingle();
+  const { data: party } = await supabase
+    .from("edospmis_contract_parties")
+    .select("email, access_token")
+    .eq("id", partyId)
+    .maybeSingle();
+  if (!contract || !party) return { error: "Couldn't find that contract or party.", ok: null };
+  if (!party.email) return { error: "This party has no email address on file.", ok: null };
+  if (!party.access_token) return { error: "This contract hasn't been sent yet.", ok: null };
+
+  const link = `${process.env.NEXT_PUBLIC_SITE_URL}/sign/${party.access_token}`;
+  const result = await sendEmail({
+    to: party.email,
+    subject: `Please review and sign: ${contract.title}`,
+    html: `<p>${session.tenant.name} has sent you a contract to review and sign: <strong>${contract.title}</strong>.</p><p><a href="${link}">Open the contract and sign it here</a></p><p>This link is unique to you and expires in 30 days.</p>`,
+  });
+  if (!result.ok) return { error: result.error ?? "Couldn't send the email.", ok: null };
+
+  return { error: null, ok: `Emailed to ${party.email}.` };
 }
 
 export async function voidContract(contractId: string, reason: string): Promise<ContractFormState> {

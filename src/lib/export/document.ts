@@ -43,6 +43,7 @@ export interface DocumentExport {
   bodyTitle?: string;
   bodyText?: string;
   signatures?: DocumentSignature[];
+  signatureNote?: string;
   footerNote?: string;
 }
 
@@ -250,6 +251,20 @@ export function documentPdf(d: DocumentExport): Uint8Array {
       y += 18;
     });
     y += 10;
+  }
+
+  if (d.signatureNote) {
+    ensureSpace(20);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...FAINT);
+    const lines: string[] = doc.splitTextToSize(latin(d.signatureNote), usable);
+    for (const line of lines) {
+      ensureSpace(12);
+      doc.text(line, margin, y);
+      y += 11;
+    }
+    y += 8;
   }
 
   if (d.footerNote) {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Contract, ContractParty } from "@/lib/database.types";
+import type { Contract, ContractEvent, ContractParty, ContractTemplate } from "@/lib/database.types";
 
 export interface ContractRow extends Contract {
   client_name: string | null;
@@ -25,6 +25,7 @@ export interface ContractDetail {
   contract: Contract;
   parties: ContractParty[];
   clientName: string | null;
+  events: ContractEvent[];
 }
 
 export async function getContractDetail(tenantId: string, contractId: string): Promise<ContractDetail | null> {
@@ -37,16 +38,30 @@ export async function getContractDetail(tenantId: string, contractId: string): P
     .maybeSingle();
   if (!contract) return null;
 
-  const [{ data: parties }, { data: client }] = await Promise.all([
-    supabase.from("edospmis_contract_parties").select("*").eq("contract_id", contractId).order("created_at"),
+  const [{ data: parties }, { data: client }, { data: events }] = await Promise.all([
+    supabase.from("edospmis_contract_parties").select("*").eq("contract_id", contractId).order("signing_order").order("created_at"),
     contract.client_id
       ? supabase.from("edospmis_clients").select("name").eq("id", contract.client_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.from("edospmis_contract_events").select("*").eq("contract_id", contractId).order("occurred_at", { ascending: false }),
   ]);
 
   return {
     contract: contract as Contract,
     parties: (parties ?? []) as ContractParty[],
     clientName: client?.name ?? null,
+    events: (events ?? []) as ContractEvent[],
   };
+}
+
+export async function getContractTemplates(tenantId: string): Promise<ContractTemplate[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("edospmis_contract_templates")
+    .select("*")
+    .eq("is_active", true)
+    .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    .order("tenant_id", { ascending: true, nullsFirst: true })
+    .order("name");
+  return (data ?? []) as ContractTemplate[];
 }

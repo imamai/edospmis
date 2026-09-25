@@ -42,10 +42,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     bodyText: contract.body,
     signatures: parties.map((p) => ({
       role: PARTY_ROLE_LABEL[p.party_role] ?? p.party_role,
-      name: p.name,
+      name: p.signed_name ? `${p.signed_name}${p.signed_title ? ` (${p.signed_title})` : ""}` : p.name,
       status: p.status,
       when: p.signed_at ? formatDate(p.signed_at) : null,
     })),
+    signatureNote: parties.some((p) => p.consented_electronic)
+      ? "Signatures above were captured electronically: each signer typed their full name, affirmatively consented to sign electronically, and had the timestamp (and, for external signers, IP address) recorded against their signature."
+      : undefined,
     footerNote:
       contract.status === "void"
         ? `Voided${contract.voided_reason ? `: ${contract.voided_reason}` : "."} Content SHA-256: ${hash}`

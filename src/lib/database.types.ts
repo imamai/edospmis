@@ -331,13 +331,14 @@ export interface PurchaseOrder {
 
 export type ContractStatus = "draft" | "sent" | "signed" | "void";
 export type ContractPartyRole = "client_signer" | "tenant_signer" | "witness";
-export type ContractPartyStatus = "pending" | "signed";
+export type ContractPartyStatus = "pending" | "viewed" | "signed" | "declined";
 
 export interface Contract {
   id: string;
   tenant_id: string;
   case_id: string | null;
   client_id: string | null;
+  template_id: string | null;
   contract_type: string;
   title: string;
   body: string;
@@ -357,9 +358,42 @@ export interface ContractParty {
   party_role: ContractPartyRole;
   name: string;
   email: string | null;
+  phone: string | null;
   status: ContractPartyStatus;
+  signing_order: number;
+  consented_electronic: boolean;
+  access_token: string | null;
+  token_expires_at: string | null;
+  signed_name: string | null;
+  signed_title: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  viewed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
   signed_at: string | null;
   created_at: string;
+}
+
+export interface ContractTemplate {
+  id: string;
+  tenant_id: string | null;
+  name: string;
+  contract_type: string;
+  body_template: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ContractEvent {
+  id: string;
+  tenant_id: string;
+  contract_id: string;
+  event_type: string;
+  actor_type: "staff" | "client" | "witness" | "system";
+  actor_label: string | null;
+  occurred_at: string;
 }
 
 /* ------------------------------------------------------------------ *

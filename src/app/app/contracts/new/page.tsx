@@ -1,5 +1,6 @@
 import { requireSession, can } from "@/lib/data/session";
 import { getClients } from "@/lib/data/reference";
+import { getContractTemplates } from "@/lib/data/contracts";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ContractForm } from "./contract-form";
 
@@ -13,7 +14,7 @@ export default async function NewContractPage() {
     );
   }
 
-  const clients = await getClients(session.tenant.id);
+  const [clients, templates] = await Promise.all([getClients(session.tenant.id), getContractTemplates(session.tenant.id)]);
 
   return (
     <div className="mx-auto max-w-3xl lg:max-w-4xl">
@@ -24,7 +25,7 @@ export default async function NewContractPage() {
       <Card>
         <CardHeader title="Draft" />
         <CardBody>
-          <ContractForm clients={clients} />
+          <ContractForm clients={clients} templates={templates} companyName={session.tenant.name} />
         </CardBody>
       </Card>
     </div>
