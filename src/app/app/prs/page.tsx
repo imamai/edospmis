@@ -22,7 +22,7 @@ export default async function MyRequestsPage() {
   const rows = await getMyPRs(session.tenant.id, session.user.id);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-ink">My requests</h1>

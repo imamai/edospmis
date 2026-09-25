@@ -17,7 +17,7 @@ export default async function HomePage() {
   const myWork = await getMyWork(session.tenant.id, roleIds);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink">

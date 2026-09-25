@@ -18,7 +18,7 @@ export default async function UsersPage() {
   const [members, roles] = await Promise.all([getMembers(session.tenant.id), getRoles(session.tenant.id)]);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div>
         <h1 className="text-xl font-semibold text-ink">Users</h1>
         <p className="mt-1 text-sm text-ink-faint">Invite teammates and manage their role in {session.tenant.name}.</p>

@@ -21,7 +21,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const { contract, parties, clientName } = detail;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           {contract.contract_type.replace("_", " ")}

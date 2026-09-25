@@ -16,7 +16,7 @@ export default async function NewContractPage() {
   const clients = await getClients(session.tenant.id);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl lg:max-w-3xl">
       <div className="mb-5">
         <h1 className="text-xl font-semibold text-ink">New contract</h1>
         <p className="mt-1 text-sm text-ink-faint">Add signing parties and send it once the draft is ready.</p>

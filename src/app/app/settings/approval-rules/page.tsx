@@ -19,7 +19,7 @@ export default async function ApprovalRulesPage() {
   const [rules, roles] = await Promise.all([getApprovalRules(session.tenant.id), getRoles(session.tenant.id)]);
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
+    <div className="mx-auto flex max-w-2xl flex-col gap-5 lg:max-w-4xl">
       <div>
         <h1 className="text-xl font-semibold text-ink">Approval rules</h1>
         <p className="mt-1 text-sm text-ink-faint">

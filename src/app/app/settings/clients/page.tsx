@@ -18,7 +18,7 @@ export default async function ClientsPage() {
   const clients = await getClients(session.tenant.id, true);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex max-w-3xl flex-col gap-5 lg:max-w-5xl">
       <div>
         <h1 className="text-xl font-semibold text-ink">Clients</h1>
         <p className="mt-1 text-sm text-ink-faint">Who requests get raised for.</p>

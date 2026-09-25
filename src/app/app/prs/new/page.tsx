@@ -19,7 +19,7 @@ export default async function NewPRPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl lg:max-w-3xl">
       <div className="mb-5">
         <h1 className="text-xl font-semibold text-ink">New request</h1>
         <p className="mt-1 text-sm text-ink-faint">This opens a new case, tracked from here through approval.</p>
