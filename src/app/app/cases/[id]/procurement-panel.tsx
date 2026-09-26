@@ -12,11 +12,12 @@ import {
   approvePO,
   type ProcurementState,
 } from "../../procurement/actions";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
@@ -65,6 +66,7 @@ export function ProcurementPanel({
 
   const [recordingQuote, setRecordingQuote] = useState(false);
   const [quoteState, quoteAction, quotePending] = useActionState(recordQuotation, initialQuotation);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
   const [expectedDelivery, setExpectedDelivery] = useState("");
@@ -145,6 +147,7 @@ export function ProcurementPanel({
   }
 
   const awardingQuote = quotations.find((q) => q.id === awardingId);
+  const viewingQuote = quotations.find((q) => q.id === viewingId);
 
   if (po) {
     return (
@@ -156,10 +159,15 @@ export function ProcurementPanel({
           action={
             <div className="flex items-center gap-2">
               {emphasize && <Badge tone="brand">Current stage</Badge>}
-              <ButtonLink href={`/api/export/po/${po.id}`} variant="secondary" size="sm">
+              <PdfLinkButton
+                href={`/api/export/po/${po.id}`}
+                title={`Purchase order ${po.po_number}`}
+                filename={po.po_number}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+              >
                 <Download className="h-3.5 w-3.5" />
                 PDF
-              </ButtonLink>
+              </PdfLinkButton>
             </div>
           }
         />
@@ -333,17 +341,90 @@ export function ProcurementPanel({
                       {formatMoney(q.total_cents, { currency: q.currency })} · {formatDate(q.submitted_at)}
                     </p>
                   </div>
-                  {canAward && (
-                    <Button size="sm" variant="secondary" onClick={() => setAwardingId(q.id)}>
-                      Award
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setViewingId(q.id)}>
+                      View
                     </Button>
-                  )}
+                    {canAward && (
+                      <Button size="sm" variant="secondary" onClick={() => setAwardingId(q.id)}>
+                        Award
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
             {awardError && <p className="mt-1 text-xs text-critical">{awardError}</p>}
           </div>
         )}
+
+        <Modal
+          open={viewingId !== null}
+          onClose={() => setViewingId(null)}
+          title={`Quotation${viewingQuote ? ` — ${viewingQuote.supplier_name}` : ""}`}
+          size="lg"
+        >
+          {viewingQuote && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+                <Badge tone={viewingQuote.submitted_via === "supplier_portal" ? "info" : "neutral"}>
+                  {viewingQuote.submitted_via === "supplier_portal" ? "Submitted via supplier portal" : "Recorded by staff"}
+                </Badge>
+                <span>{formatDate(viewingQuote.submitted_at)}</span>
+              </div>
+
+              {viewingQuote.line_prices && viewingQuote.line_prices.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-line">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-line bg-surface-sunk text-xs uppercase tracking-wide text-ink-faint">
+                        <th className="p-2.5 font-medium">Item</th>
+                        <th className="p-2.5 font-medium">Qty</th>
+                        <th className="p-2.5 font-medium">Unit</th>
+                        <th className="p-2.5 font-medium">Unit price</th>
+                        <th className="p-2.5 text-right font-medium">Line total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingQuote.line_prices.map((line, i) => (
+                        <tr key={i} className="border-b border-line last:border-0">
+                          <td className="p-2.5 text-ink">{line.description}</td>
+                          <td className="p-2.5 tnum text-ink-soft">{line.qty}</td>
+                          <td className="p-2.5 text-ink-soft">{line.unit}</td>
+                          <td className="p-2.5 tnum text-ink-soft">{formatMoney(line.unit_price_cents, { currency: viewingQuote.currency })}</td>
+                          <td className="p-2.5 text-right tnum text-ink-soft">
+                            {formatMoney(line.qty * line.unit_price_cents, { currency: viewingQuote.currency })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-line bg-surface-sunk">
+                        <td colSpan={4} className="p-2.5 text-sm font-medium text-ink">
+                          Total
+                        </td>
+                        <td className="p-2.5 text-right text-sm font-semibold tnum text-ink">
+                          {formatMoney(viewingQuote.total_cents, { currency: viewingQuote.currency })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-ink-soft">
+                  No line-item breakdown on file — recorded as a single total of {formatMoney(viewingQuote.total_cents, { currency: viewingQuote.currency })}.
+                </p>
+              )}
+
+              {viewingQuote.notes && (
+                <div>
+                  <p className="mb-1 text-xs font-semibold tracking-wide text-ink-faint uppercase">Notes from the supplier</p>
+                  <p className="rounded-lg border border-line bg-surface-sunk p-3 text-sm whitespace-pre-wrap text-ink-soft">{viewingQuote.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
 
         <Modal
           open={awardingId !== null}

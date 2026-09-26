@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
-import { documentResponse, type DocumentExport } from "@/lib/export/document";
+import { documentResponse, fetchLogoDataUrl, type DocumentExport } from "@/lib/export/document";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { PRItem, PurchaseOrder } from "@/lib/database.types";
 
@@ -26,6 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     edospmis_cases: { case_number: string } | null;
   };
   const items = (record.items as PRItem[]) ?? [];
+  const tenantLogoDataUrl = await fetchLogoDataUrl(session.tenant.branding.logo_url);
 
   const doc: DocumentExport = {
     tenantName: session.tenant.name,
@@ -33,12 +34,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     tenantPhone: session.tenant.branding.phone,
     tenantEmail: session.tenant.branding.email,
     tenantRegistrationNumber: session.tenant.branding.registration_number,
+    tenantLogoDataUrl,
     docType: "Purchase Order",
     docNumber: record.po_number,
     statusLabel: record.status.replace(/_/g, " "),
     fields: [
       { label: "Supplier", value: record.edospmis_suppliers?.name ?? "—" },
-      { label: "Case", value: record.edospmis_cases?.case_number ?? "—" },
+      { label: "PR No.", value: record.edospmis_cases?.case_number ?? "—" },
       { label: "Issued", value: formatDate(record.issued_at) },
       { label: "Expected delivery", value: record.expected_delivery_date ? formatDate(record.expected_delivery_date) : "Not set" },
     ],

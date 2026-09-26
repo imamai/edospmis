@@ -1,3 +1,5 @@
+import type { Tone } from "@/components/ui/badge";
+
 /** Shared between the Reports screen and its exports, so a stage never reads differently in each. */
 export const STAGE_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -14,6 +16,53 @@ export const STAGE_LABEL: Record<string, string> = {
   finance: "Finance",
   delivery: "Delivery",
   closed: "Completed",
+};
+
+/**
+ * One badge-color rule for every stage, shared by the case detail page, "My
+ * requests", and the Requisitions pipeline — previously three copies of the
+ * same seven-entry map that had already drifted (only the case detail page
+ * knew about the post-approval stages). Approval and Completed intentionally
+ * stand out from the plain "in progress" stages: Approval is amber because
+ * it's someone's turn to act, Completed is the brand navy as a clear "done".
+ */
+export const STAGE_TONE: Record<string, Tone> = {
+  draft: "neutral",
+  submitted: "info",
+  approval: "attention",
+  approved: "good",
+  rejected: "critical",
+  returned: "attention",
+  cancelled: "neutral",
+  procurement: "info",
+  po_approval: "attention",
+  awarded: "good",
+  receiving: "info",
+  finance: "info",
+  delivery: "info",
+  closed: "brand",
+};
+
+/** Short "what happens here" copy, for a stepper tooltip or a summary line — content lifted from the ProcureMIS reference spec, which is descriptive UI copy rather than business logic. */
+export const STAGE_HINT: Record<string, string> = {
+  draft: "Requester completes and submits",
+  submitted: "Waiting to enter the approval queue",
+  approval: "HOD and budget holder review",
+  approved: "Cleared for sourcing",
+  procurement: "RFQ / tender open to suppliers",
+  po_approval: "Purchase order awaiting approval",
+  awarded: "LPO issued to winning supplier",
+  receiving: "Goods inspected, GRN raised",
+  finance: "Invoice matched, payment processed",
+  delivery: "Items issued to department",
+  closed: "Closed and archived",
+};
+
+/** The three non-rejection-shaped terminal outcomes — shown as a distinct end state on a WorkflowStepper, never just another step. */
+export const TERMINAL_LABEL: Record<string, string> = {
+  rejected: "Rejected",
+  returned: "Returned for correction",
+  cancelled: "Cancelled",
 };
 
 /** Which stage keys make each case-detail panel "the one currently in play". */

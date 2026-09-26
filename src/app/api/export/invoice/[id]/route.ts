@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
-import { documentResponse, type DocumentExport } from "@/lib/export/document";
+import { documentResponse, fetchLogoDataUrl, type DocumentExport } from "@/lib/export/document";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { Invoice, InvoiceItem } from "@/lib/database.types";
 
@@ -27,6 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     edospmis_purchase_orders: { po_number: string } | null;
   };
   const items = (record.items as InvoiceItem[]) ?? [];
+  const tenantLogoDataUrl = await fetchLogoDataUrl(session.tenant.branding.logo_url);
 
   const doc: DocumentExport = {
     tenantName: session.tenant.name,
@@ -34,12 +35,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     tenantPhone: session.tenant.branding.phone,
     tenantEmail: session.tenant.branding.email,
     tenantRegistrationNumber: session.tenant.branding.registration_number,
+    tenantLogoDataUrl,
     docType: "Invoice",
     docNumber: record.invoice_number,
     statusLabel: record.status.replace(/_/g, " "),
     fields: [
       { label: "Supplier", value: record.edospmis_suppliers?.name ?? "—" },
-      { label: "Case", value: record.edospmis_cases?.case_number ?? "—" },
+      { label: "PR No.", value: record.edospmis_cases?.case_number ?? "—" },
       { label: "Purchase order", value: record.edospmis_purchase_orders?.po_number ?? "—" },
       { label: "Payment terms", value: record.payment_terms ?? "Not set" },
       { label: "Due date", value: record.due_date ? formatDate(record.due_date) : "Not set" },
@@ -59,7 +61,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       { label: "Total", value: formatMoney(record.total_cents, { currency: record.currency }), strong: true },
     ],
     footerNote: record.paid_at
-      ? `Paid ${formatDate(record.paid_at)}${record.payment_reference ? ` · reference ${record.payment_reference}` : ""}.`
+      ? `Paid ${formatDate(record.paid_at)}${record.payment_method ? ` via ${record.payment_method}` : ""}${record.payment_reference ? ` · reference ${record.payment_reference}` : ""}.`
       : undefined,
   };
 

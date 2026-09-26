@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Tone = "neutral" | "good" | "attention" | "critical" | "info" | "brand";
+export type Tone = "neutral" | "good" | "attention" | "critical" | "info" | "brand";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-surface-sunk text-ink-soft",

@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Download, Plus, Trash2, Receipt } from "lucide-react";
 import {
   submitInvoice,
@@ -14,9 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { NumberInput, TextArea, TextInput } from "@/components/ui/field";
+import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { formatDate, formatMoney } from "@/lib/utils";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import type { FinanceDetail } from "@/lib/data/finance";
 import type { PRItem } from "@/lib/database.types";
 
@@ -217,13 +218,15 @@ export function FinancePanel({
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={STATUS_TONE[invoice.status]}>{invoice.status}</Badge>
-                <Link
+                <PdfLinkButton
                   href={`/api/export/invoice/${invoice.id}`}
+                  title={`Invoice ${invoice.invoice_number}`}
+                  filename={invoice.invoice_number}
                   className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand"
                 >
                   <Download className="h-3.5 w-3.5" />
                   PDF
-                </Link>
+                </PdfLinkButton>
               </div>
             </div>
 
@@ -285,6 +288,16 @@ export function FinancePanel({
                   <form onSubmit={payForm} className="flex flex-col gap-3">
                     <input type="hidden" name="invoice_id" value={invoice.id} />
                     <input type="hidden" name="case_id" value={caseId} />
+                    <SelectInput label="Payment method" name="payment_method" required defaultValue="">
+                      <option value="" disabled>
+                        Choose how this was paid
+                      </option>
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </SelectInput>
                     <TextInput label="Payment reference" name="reference" hint="Optional — a transaction ID or cheque number" />
                     {payState.error && <p className="text-xs text-critical">{payState.error}</p>}
                     <ModalFormActions onCancel={() => setPaying(false)} submitLabel="Record payment" busy={payPending} />
@@ -296,6 +309,7 @@ export function FinancePanel({
             {invoice.status === "paid" && (
               <p className="text-xs text-ink-faint">
                 Paid {formatDate(invoice.paid_at)}
+                {invoice.payment_method ? ` via ${invoice.payment_method}` : ""}
                 {invoice.payment_reference ? ` · ref. ${invoice.payment_reference}` : ""}
               </p>
             )}

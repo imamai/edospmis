@@ -22,32 +22,9 @@ import { CancelCaseButton } from "./cancel-case-button";
 import { CloseCaseButton } from "./close-case-button";
 import { CaseSummaryHeader } from "./case-summary-header";
 import { NextActionBanner } from "./next-action-banner";
-import { PANEL_STAGE_KEYS, isCurrentStage } from "@/lib/stage-labels";
+import { PANEL_STAGE_KEYS, isCurrentStage, STAGE_TONE, TERMINAL_LABEL } from "@/lib/stage-labels";
 
 const TERMINAL_CASE_STATUSES = ["closed", "rejected", "returned", "cancelled"];
-
-const STATUS_TONE = {
-  draft: "neutral",
-  submitted: "info",
-  approval: "info",
-  approved: "good",
-  rejected: "critical",
-  returned: "attention",
-  cancelled: "neutral",
-  procurement: "info",
-  po_approval: "attention",
-  awarded: "good",
-  receiving: "info",
-  finance: "info",
-  delivery: "info",
-  closed: "good",
-} as const;
-
-const TERMINAL_LABEL: Record<string, string> = {
-  rejected: "Rejected",
-  returned: "Returned for correction",
-  cancelled: "Cancelled",
-};
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -91,7 +68,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         currency={pr.currency}
         openedAt={c.opened_at}
         status={c.status}
-        statusTone={STATUS_TONE[c.status]}
+        statusTone={STAGE_TONE[c.status] ?? "neutral"}
       />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -99,7 +76,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{c.case_number}</p>
           <h1 className="mt-0.5 text-xl font-semibold text-ink">{pr.title}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge>
+            <Badge tone={STAGE_TONE[c.status] ?? "neutral"}>{c.status}</Badge>
             <Badge tone="neutral">{c.priority}</Badge>
             {clientName && <Badge tone="brand">{clientName}</Badge>}
           </div>

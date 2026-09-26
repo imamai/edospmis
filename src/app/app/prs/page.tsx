@@ -5,17 +5,8 @@ import { getMyPRs } from "@/lib/data/cases";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { STAGE_TONE } from "@/lib/stage-labels";
 import { formatMoney } from "@/lib/utils";
-
-const STATUS_TONE = {
-  draft: "neutral",
-  submitted: "info",
-  approval: "info",
-  approved: "good",
-  rejected: "critical",
-  returned: "attention",
-  cancelled: "neutral",
-} as const;
 
 export default async function MyRequestsPage() {
   const session = await requireSession();
@@ -46,7 +37,7 @@ export default async function MyRequestsPage() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="pb-2 pr-4 font-medium">Case</th>
+                  <th className="pb-2 pr-4 font-medium">PR No.</th>
                   <th className="pb-2 pr-4 font-medium">Title</th>
                   <th className="pb-2 pr-4 font-medium">Amount</th>
                   <th className="pb-2 font-medium">Status</th>
@@ -63,7 +54,7 @@ export default async function MyRequestsPage() {
                     <td className="py-3 pr-4 text-ink">{pr.title}</td>
                     <td className="py-3 pr-4 tnum text-ink-soft">{formatMoney(pr.estimated_cost_cents, { currency: pr.currency })}</td>
                     <td className="py-3">
-                      <Badge tone={STATUS_TONE[pr.status]}>{pr.status}</Badge>
+                      <Badge tone={STAGE_TONE[pr.status] ?? "neutral"}>{pr.status}</Badge>
                     </td>
                   </tr>
                 ))}

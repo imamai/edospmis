@@ -3,13 +3,16 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronRight, ListFilter } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics, getStageCases } from "@/lib/data/analytics";
+import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
 import { resolvePeriod } from "@/lib/report-period";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExportLinks } from "@/components/ui/export-links";
 import { PeriodFilterSuspended } from "@/components/ui/period-filter-suspended";
 import { STAGE_LABEL } from "@/lib/stage-labels";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, formatDate } from "@/lib/utils";
+import { InvoicesTable } from "../invoices-table";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 
 const REPORTS = {
   aging: { title: "Open requests by age", subtitle: "Every case still open, oldest first" },
@@ -17,8 +20,17 @@ const REPORTS = {
   "sla-compliance": { title: "Approval SLA compliance", subtitle: "Completed approvals against their SLA target" },
   "supplier-performance": { title: "Supplier performance", subtitle: "Spend, acceptance rate and lead time per supplier" },
   "spend-by-category": { title: "Spend by category", subtitle: "Estimated cost of every request, grouped by category" },
+  rfqs: { title: "RFQs & tenders", subtitle: "Every request for quotation raised, who was invited, and how many quoted back" },
+  "purchase-orders": { title: "Purchase orders", subtitle: "Every LPO issued, its supplier, value and status" },
+  "goods-received": { title: "Goods received", subtitle: "Every GRN raised against a purchase order, inspected or not" },
+  invoices: { title: "Invoices & payments", subtitle: "Every invoice submitted, matched, approved or paid" },
 } as const;
 type ReportKey = keyof typeof REPORTS;
+const PROCUREMENT_REPORT_KEYS = ["rfqs", "purchase-orders", "goods-received", "invoices"] as const;
+type ProcurementReportKey = (typeof PROCUREMENT_REPORT_KEYS)[number];
+function isProcurementReportKey(k: ReportKey): k is ProcurementReportKey {
+  return (PROCUREMENT_REPORT_KEYS as readonly string[]).includes(k);
+}
 
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes.toFixed(0)}m`;
@@ -32,7 +44,17 @@ export default async function ReportDetailPage({
   searchParams,
 }: {
   params: Promise<{ report: string }>;
-  searchParams: Promise<{ period?: string; from?: string; to?: string; q?: string; status?: string; priority?: string; stage?: string; drillStage?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    from?: string;
+    to?: string;
+    q?: string;
+    status?: string;
+    priority?: string;
+    stage?: string;
+    dept?: string;
+    drillStage?: string;
+  }>;
 }) {
   const { report } = await params;
   if (!(report in REPORTS)) notFound();
@@ -57,8 +79,15 @@ export default async function ReportDetailPage({
   const statusFilter = sp.status ?? "";
   const priorityFilter = sp.priority ?? "";
   const stageFilter = sp.stage ?? "";
+  const deptFilter = (sp.dept ?? "").trim();
   const drillStage = key === "stage-durations" ? (sp.drillStage ?? "") : "";
   const drillCases = drillStage ? await getStageCases(session.tenant.id, drillStage, { from: period.from, to: period.to }) : [];
+
+  const reportPeriod = { from: period.from, to: period.to };
+  const rfqRows = key === "rfqs" ? await getRfqReport(session.tenant.id, reportPeriod) : [];
+  const poRows = key === "purchase-orders" ? await getPurchaseOrderReport(session.tenant.id, reportPeriod) : [];
+  const grnRows = key === "goods-received" ? await getGoodsReceivedReport(session.tenant.id, reportPeriod) : [];
+  const invoiceRows = key === "invoices" ? await getInvoiceReport(session.tenant.id, reportPeriod) : [];
 
   const filteredAging = data.aging.filter(
     (c) =>
@@ -73,6 +102,43 @@ export default async function ReportDetailPage({
   const stageOwnersByKey = new Map(data.stageOwners.map((o) => [o.stage_key, o.role_names]));
   const totalSpend = filteredCategories.reduce((sum, c) => sum + c.total_estimated_cents, 0);
 
+  const filteredRfqs = rfqRows.filter(
+    (r) =>
+      (!q || r.case_number.toLowerCase().includes(q) || r.title.toLowerCase().includes(q)) &&
+      (!statusFilter || r.status === statusFilter) &&
+      (!deptFilter || r.department_name === deptFilter),
+  );
+  const filteredPos = poRows.filter(
+    (r) =>
+      (!q || r.po_number.toLowerCase().includes(q) || r.case_number.toLowerCase().includes(q) || r.supplier_name.toLowerCase().includes(q)) &&
+      (!statusFilter || r.status === statusFilter) &&
+      (!deptFilter || r.department_name === deptFilter),
+  );
+  const filteredGrns = grnRows.filter(
+    (r) =>
+      (!q || r.grn_number.toLowerCase().includes(q) || r.po_number.toLowerCase().includes(q) || r.case_number.toLowerCase().includes(q)) &&
+      (!statusFilter || r.status === statusFilter) &&
+      (!deptFilter || r.department_name === deptFilter),
+  );
+  const filteredInvoices = invoiceRows.filter(
+    (r) =>
+      (!q || r.invoice_number.toLowerCase().includes(q) || r.case_number.toLowerCase().includes(q) || r.supplier_name.toLowerCase().includes(q)) &&
+      (!statusFilter || r.status === statusFilter) &&
+      (!deptFilter || r.department_name === deptFilter),
+  );
+
+  const procurementReportRows: { status: string; department_name: string | null }[] = isProcurementReportKey(key)
+    ? key === "rfqs"
+      ? rfqRows
+      : key === "purchase-orders"
+        ? poRows
+        : key === "goods-received"
+          ? grnRows
+          : invoiceRows
+    : [];
+  const procurementStatuses = Array.from(new Set(procurementReportRows.map((r) => r.status)));
+  const procurementDepartments = Array.from(new Set(procurementReportRows.map((r) => r.department_name).filter((d): d is string => !!d))).sort();
+
   const hiddenPeriodInputs = (
     <>
       {sp.period && <input type="hidden" name="period" value={sp.period} />}
@@ -86,7 +152,7 @@ export default async function ReportDetailPage({
   const all_stages = Array.from(new Set([...data.stageDurations.map((s) => s.stage_key), ...data.slaCompliance.map((s) => s.stage_key)]));
 
   const clearHref = `/app/reports/${key}${sp.period ? `?period=${sp.period}` : ""}`;
-  const hasActiveFilter = Boolean(sp.q || sp.status || sp.priority || sp.stage);
+  const hasActiveFilter = Boolean(sp.q || sp.status || sp.priority || sp.stage || sp.dept);
 
   function hrefWithDrill(stageKey: string | null): string {
     const params = new URLSearchParams();
@@ -134,6 +200,7 @@ export default async function ReportDetailPage({
                   if (sp.status) params.set("status", sp.status);
                   if (sp.priority) params.set("priority", sp.priority);
                   if (sp.stage) params.set("stage", sp.stage);
+                  if (sp.dept) params.set("dept", sp.dept);
                   const qs = params.toString();
                   return qs ? `?${qs}` : "";
                 })()}`}
@@ -150,7 +217,7 @@ export default async function ReportDetailPage({
         <CardBody>
           <form method="get" className="flex flex-wrap items-end gap-3">
             {hiddenPeriodInputs}
-            {(key === "aging" || key === "supplier-performance" || key === "spend-by-category") && (
+            {(key === "aging" || key === "supplier-performance" || key === "spend-by-category" || isProcurementReportKey(key)) && (
               <div className="flex min-w-[12rem] flex-1 flex-col gap-1.5">
                 <label htmlFor="q" className="text-sm font-medium text-ink">
                   Search
@@ -159,10 +226,64 @@ export default async function ReportDetailPage({
                   id="q"
                   name="q"
                   defaultValue={sp.q ?? ""}
-                  placeholder={key === "aging" ? "Case number or title" : key === "supplier-performance" ? "Supplier name" : "Category name"}
+                  placeholder={
+                    key === "aging"
+                      ? "PR number or title"
+                      : key === "supplier-performance"
+                        ? "Supplier name"
+                        : key === "spend-by-category"
+                          ? "Category name"
+                          : key === "rfqs"
+                            ? "PR number or RFQ title"
+                            : key === "purchase-orders"
+                              ? "PO number, PR number or supplier"
+                              : key === "goods-received"
+                                ? "GRN number, PO number or PR number"
+                                : "Invoice number, PR number or supplier"
+                  }
                   className="h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none"
                 />
               </div>
+            )}
+            {isProcurementReportKey(key) && (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="status" className="text-sm font-medium text-ink">
+                    Status
+                  </label>
+                  <select
+                    id="status"
+                    name="status"
+                    defaultValue={statusFilter}
+                    className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
+                  >
+                    <option value="">Any status</option>
+                    {procurementStatuses.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="dept" className="text-sm font-medium text-ink">
+                    Department
+                  </label>
+                  <select
+                    id="dept"
+                    name="dept"
+                    defaultValue={deptFilter}
+                    className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
+                  >
+                    <option value="">All departments</option>
+                    {procurementDepartments.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
             )}
             {(key === "stage-durations" || key === "sla-compliance") && (
               <div className="flex min-w-[12rem] flex-col gap-1.5">
@@ -246,7 +367,7 @@ export default async function ReportDetailPage({
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="pb-2 pr-4 font-medium">Case</th>
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
                     <th className="pb-2 pr-4 font-medium">Title</th>
                     <th className="pb-2 pr-4 font-medium">Stage</th>
                     <th className="pb-2 pr-4 font-medium">Priority</th>
@@ -338,7 +459,7 @@ export default async function ReportDetailPage({
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="pb-2 pr-4 font-medium">Case</th>
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
                     <th className="pb-2 pr-4 font-medium">Title</th>
                     <th className="pb-2 pr-4 font-medium">Priority</th>
                     <th className="pb-2 pr-4 font-medium">Entered</th>
@@ -476,6 +597,162 @@ export default async function ReportDetailPage({
                 })
               )}
             </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {key === "rfqs" && (
+        <Card>
+          <CardHeader title={`${filteredRfqs.length} of ${rfqRows.length}`} />
+          <CardBody className="overflow-x-auto">
+            {filteredRfqs.length === 0 ? (
+              <p className="text-sm text-ink-faint">{rfqRows.length === 0 ? "No RFQs raised in this period." : "Nothing matches these filters."}</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
+                    <th className="pb-2 pr-4 font-medium">Title</th>
+                    <th className="pb-2 pr-4 font-medium">Department</th>
+                    <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 font-medium">Closing</th>
+                    <th className="pb-2 pr-4 font-medium">Invited</th>
+                    <th className="pb-2 font-medium">Quotations</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRfqs.map((r) => (
+                    <tr key={r.rfq_id} className="border-b border-line last:border-0">
+                      <td className="py-2 pr-4 tnum">
+                        <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
+                          {r.case_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.title}</td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.department_name ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        <Badge tone={r.status === "open" ? "info" : r.status === "closed" ? "good" : "neutral"}>{r.status}</Badge>
+                      </td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.closing_date ? formatDate(r.closing_date) : "—"}</td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.invited_count}</td>
+                      <td className="py-2 tnum text-ink-soft">{r.quotation_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {key === "purchase-orders" && (
+        <Card>
+          <CardHeader title={`${filteredPos.length} of ${poRows.length}`} />
+          <CardBody className="overflow-x-auto">
+            {filteredPos.length === 0 ? (
+              <p className="text-sm text-ink-faint">{poRows.length === 0 ? "No purchase orders issued in this period." : "Nothing matches these filters."}</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="pb-2 pr-4 font-medium">PO number</th>
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
+                    <th className="pb-2 pr-4 font-medium">Department</th>
+                    <th className="pb-2 pr-4 font-medium">Supplier</th>
+                    <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Total</th>
+                    <th className="pb-2 font-medium">Issued</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPos.map((r) => (
+                    <tr key={r.po_id} className="border-b border-line last:border-0">
+                      <td className="py-2 pr-4">
+                        <PdfLinkButton
+                          href={`/api/export/po/${r.po_id}`}
+                          title={`Purchase order ${r.po_number}`}
+                          filename={r.po_number}
+                          className="font-mono text-xs text-brand hover:underline"
+                        >
+                          {r.po_number}
+                        </PdfLinkButton>
+                      </td>
+                      <td className="py-2 pr-4 tnum">
+                        <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
+                          {r.case_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.department_name ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        <Link href={`/app/settings/suppliers/${r.supplier_id}`} className="text-ink-soft hover:text-brand hover:underline">
+                          {r.supplier_name}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <Badge tone={r.status === "issued" ? "good" : r.status === "pending_approval" ? "attention" : "critical"}>{r.status}</Badge>
+                      </td>
+                      <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(r.total_cents, { currency: r.currency })}</td>
+                      <td className="py-2 tnum text-ink-soft">{formatDate(r.issued_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {key === "goods-received" && (
+        <Card>
+          <CardHeader title={`${filteredGrns.length} of ${grnRows.length}`} />
+          <CardBody className="overflow-x-auto">
+            {filteredGrns.length === 0 ? (
+              <p className="text-sm text-ink-faint">{grnRows.length === 0 ? "No goods received in this period." : "Nothing matches these filters."}</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="pb-2 pr-4 font-medium">GRN number</th>
+                    <th className="pb-2 pr-4 font-medium">PO number</th>
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
+                    <th className="pb-2 pr-4 font-medium">Department</th>
+                    <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 font-medium">Received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGrns.map((r) => (
+                    <tr key={r.grn_id} className="border-b border-line last:border-0">
+                      <td className="py-2 pr-4 font-mono text-xs text-ink">{r.grn_number}</td>
+                      <td className="py-2 pr-4 font-mono text-xs text-ink-soft">{r.po_number}</td>
+                      <td className="py-2 pr-4 tnum">
+                        <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
+                          {r.case_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.department_name ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        <Badge tone={r.status === "inspected" ? "good" : "neutral"}>{r.status}</Badge>
+                      </td>
+                      <td className="py-2 tnum text-ink-soft">{formatDate(r.received_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {key === "invoices" && (
+        <Card>
+          <CardHeader title={`${filteredInvoices.length} of ${invoiceRows.length}`} />
+          <CardBody className="overflow-x-auto">
+            {filteredInvoices.length === 0 ? (
+              <p className="text-sm text-ink-faint">{invoiceRows.length === 0 ? "No invoices submitted in this period." : "Nothing matches these filters."}</p>
+            ) : (
+              <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} />
+            )}
           </CardBody>
         </Card>
       )}

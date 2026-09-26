@@ -16,7 +16,7 @@ export function OrganizationForm({ tenant }: { tenant: Tenant }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label="Workspace name" name="name" required defaultValue={tenant.name} />
         <TextInput
-          label="Case numbering format"
+          label="PR numbering format"
           name="numbering_format"
           required
           defaultValue={tenant.numbering_format}

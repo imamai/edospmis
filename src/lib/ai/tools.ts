@@ -142,7 +142,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "find_case",
-    description: "Search for a case by its case number (e.g. CASE-2026-000012) or by a few words from the request's title.",
+    description: "Search for a case by its PR number (e.g. PR-2026-000012) or by a few words from the request's title.",
     input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     label: (i) => `Find case: "${i.query}"`,
     run: async (ctx, input) => {

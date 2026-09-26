@@ -580,6 +580,7 @@ export interface Invoice {
   approved_at: string | null;
   paid_at: string | null;
   payment_reference: string | null;
+  payment_method: string | null;
   created_at: string;
 }
 

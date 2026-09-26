@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type Tone } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/utils";
 import type { CaseStatus } from "@/lib/database.types";
 
@@ -19,7 +19,7 @@ export function CaseSummaryHeader({
   currency: string;
   openedAt: string;
   status: CaseStatus;
-  statusTone: "neutral" | "info" | "good" | "attention" | "critical";
+  statusTone: Tone;
 }) {
   const daysOpen = Math.max(0, Math.round((Date.now() - new Date(openedAt).getTime()) / 86400000));
 

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { setSupplierActive } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import type { Supplier } from "@/lib/database.types";
@@ -20,7 +21,9 @@ export function SupplierRow({ supplier }: { supplier: Supplier }) {
   return (
     <tr className="border-b border-line last:border-0">
       <td className="py-2.5 pr-4">
-        <p className="text-sm font-medium text-ink">{supplier.name}</p>
+        <Link href={`/app/settings/suppliers/${supplier.id}`} className="text-sm font-medium text-brand hover:underline">
+          {supplier.name}
+        </Link>
         {supplier.email && <p className="text-xs text-ink-faint">{supplier.email}</p>}
       </td>
       <td className="py-2.5 pr-4 text-sm text-ink-soft">{supplier.phone ?? "—"}</td>

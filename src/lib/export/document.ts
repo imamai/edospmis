@@ -39,6 +39,8 @@ export interface DocumentExport {
   tenantPhone?: string | null;
   tenantEmail?: string | null;
   tenantRegistrationNumber?: string | null;
+  /** A data: URL, already fetched — see fetchLogoDataUrl(). Never a bare http(s) URL; jsPDF needs the bytes in hand. */
+  tenantLogoDataUrl?: string | null;
   docType: string;
   docNumber: string;
   statusLabel?: string;
@@ -62,10 +64,35 @@ function file(body: Uint8Array, filename: string): Response {
   return new Response(body as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename.replace(/[^\w.-]/g, "_")}.pdf"`,
+      // "inline", not "attachment" — lets the browser render this straight
+      // into an <iframe> (the PO/invoice preview modal) instead of forcing
+      // a download; a viewer can still save it from there if they want to.
+      "Content-Disposition": `inline; filename="${filename.replace(/[^\w.-]/g, "_")}.pdf"`,
       "Cache-Control": "no-store",
     },
   });
+}
+
+/**
+ * Fetches a tenant's logo (from `branding.logo_url`) and returns it as a
+ * data: URL jsPDF's addImage can embed synchronously. jsPDF can't fetch a
+ * bare URL itself, so this is the one async step a document export needs
+ * before calling documentPdf(). Returns null (never throws) on a missing
+ * URL, a failed fetch, or an unsupported image type — a broken/unreachable
+ * logo should degrade to the text-only letterhead, not break the PDF.
+ */
+export async function fetchLogoDataUrl(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.startsWith("image/png") && !contentType.startsWith("image/jpeg")) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 export function documentResponse(filename: string, doc: DocumentExport): Response {
@@ -88,10 +115,17 @@ export function documentPdf(d: DocumentExport): Uint8Array {
   };
 
   // ── Letterhead ──
+  const logoSize = 30;
+  const textX = d.tenantLogoDataUrl ? margin + logoSize + 10 : margin;
+  if (d.tenantLogoDataUrl) {
+    const format = d.tenantLogoDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+    doc.addImage(d.tenantLogoDataUrl, format, margin, y - 4, logoSize, logoSize, undefined, "FAST");
+  }
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(...BRAND);
-  doc.text(latin(d.tenantName), margin, y);
+  doc.text(latin(d.tenantName), textX, y);
 
   doc.setFontSize(16);
   doc.setTextColor(...INK);
@@ -104,9 +138,10 @@ export function documentPdf(d: DocumentExport): Uint8Array {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...FAINT);
-    doc.text(latin(brandingLine), margin, y + 13);
+    doc.text(latin(brandingLine), textX, y + 13);
   }
   y += brandingLine ? 23 : 18;
+  y = Math.max(y, margin - 4 + logoSize + (d.tenantLogoDataUrl ? 8 : 0));
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);

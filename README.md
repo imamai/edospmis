@@ -37,8 +37,12 @@ blueprint; this file only covers running what's built so far.
 **Phase 2 — Case + PR + Workflow + Queue + Approval + SLA (MVP): implemented.**
 
 - Cases and PRs: a PR is drafted with dynamic line items, opens a Case
-  with a tenant-formatted case number (`CASE-{year}-{seq}`, atomically
-  sequenced), and is submitted for approval from the Case detail page.
+  with a tenant-formatted PR number (`PR-{year}-{seq}` — default as of
+  migration `0031_pr_numbering_format`, tenant-configurable in Settings >
+  Organization, atomically sequenced), and is submitted for approval from
+  the Case detail page. The Case entity and `case_id` FK are unchanged —
+  only the displayed/stored number string moved from `CASE-` to `PR-`, to
+  match the "PR No." label used everywhere in the UI.
 - Workflow engine: a default `draft → approval → approved` workflow is
   seeded per tenant, versioned and stored as data (`edospmis_workflow_versions.definition`)
   so the Case detail chevron (`WorkflowStepper`) reads real stage labels —

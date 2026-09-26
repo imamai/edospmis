@@ -85,12 +85,44 @@ export async function recordInvoicePayment(_prev: FinanceState, form: FormData):
   const invoiceId = String(form.get("invoice_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
   const reference = String(form.get("reference") ?? "").trim() || null;
+  const paymentMethod = String(form.get("payment_method") ?? "").trim() || null;
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_record_payment", { p_invoice_id: invoiceId, p_reference: reference });
+  const { error } = await supabase.rpc("edospmis_record_payment", {
+    p_invoice_id: invoiceId,
+    p_reference: reference,
+    p_payment_method: paymentMethod,
+  });
   if (error) return { error: error.message, ok: null };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Payment recorded." };
+}
+
+/**
+ * The "pay several invoices in one sitting" batch action for the Invoices &
+ * payments report — a deliberate, narrow exception to reports staying
+ * read-only (see the write-up shared with the user before this shipped):
+ * it calls the exact same edospmis_record_payment RPC as the single-invoice
+ * flow above, once per selected invoice, so there is still exactly one
+ * place that decides whether a payment can be recorded and one audit-log
+ * shape for it — this just lets a Finance user fire it at several invoices
+ * without opening each case individually.
+ */
+export async function bulkRecordPayments(invoiceIds: string[], reference: string, paymentMethod: string): Promise<FinanceState> {
+  await requireSession();
+  if (invoiceIds.length === 0) return { error: "Select at least one invoice.", ok: null };
+
+  const supabase = await createClient();
+  for (const invoiceId of invoiceIds) {
+    const { error } = await supabase.rpc("edospmis_record_payment", {
+      p_invoice_id: invoiceId,
+      p_reference: reference.trim() || null,
+      p_payment_method: paymentMethod.trim() || null,
+    });
+    if (error) return { error: `Stopped after a problem on one invoice: ${error.message}`, ok: null };
+  }
+  revalidatePath("/app/reports/invoices");
+  return { error: null, ok: `${invoiceIds.length} invoice${invoiceIds.length === 1 ? "" : "s"} marked paid.` };
 }
 
 export async function setSodSettings(_prev: FinanceState, form: FormData): Promise<FinanceState> {

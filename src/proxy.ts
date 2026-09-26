@@ -43,13 +43,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  if (user && (pathname === "/login" || pathname === "/signup")) {
-    const app = request.nextUrl.clone();
-    app.pathname = "/app";
-    app.search = "";
-    return NextResponse.redirect(app);
-  }
-
+  // Deliberately no "user with a valid JWT on /login or /signup -> bounce to
+  // /app" rule here. It used to exist as a UX shortcut, but it's redundant —
+  // `signIn`/`signUp` already `redirect("/app")` themselves on success — and
+  // it produces a genuine redirect loop for a real, reachable state: a
+  // Supabase auth session can exist (e.g. right after signUp()'s own
+  // session-issuing behavior) before `edospmis_memberships` has an active
+  // row for that user. In that window, `getSession()` (lib/data/session.ts)
+  // correctly treats them as not-yet-provisioned and sends them to /login,
+  // while this rule — checking only "is there a JWT", nothing deeper — sent
+  // them straight back to /app, which sent them to /login again: an infinite
+  // ERR_TOO_MANY_REDIRECTS. Landing on /login and re-submitting the form is
+  // harmless (and actually re-runs the pending-tenant provisioning fallback
+  // in signIn's own action); looping forever is not.
   return response;
 }
 

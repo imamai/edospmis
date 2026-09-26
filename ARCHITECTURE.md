@@ -818,3 +818,12 @@ Before Phase 1 implementation begins, please confirm or redirect:
 
 No implementation work starts until these are resolved or you say to
 proceed with the stated recommendations as defaults.
+
+**Resolved (post-launch)**: item 4's default was revisited after the UI's
+own "Case" labels were changed to "PR No." throughout — the stored/displayed
+number format moved from `CASE-{year}-{seq}` to `PR-{year}-{seq}` in
+migration `0031_pr_numbering_format`, still tenant-configurable in Settings
+> Organization. This is a display-string change only; the Case entity,
+`edospmis_cases` table and `case_id` FK on every downstream table are
+unchanged — §1.2's Case-vs-PR modelling decision still stands as written
+above.

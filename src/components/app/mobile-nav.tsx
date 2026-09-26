@@ -8,20 +8,37 @@ import { NAV_GROUPS, NAV_BOTTOM_ITEMS, type NavItem } from "@/lib/nav-items";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/app/actions";
 
-function NavLink({ item, pathname, onClick }: { item: NavItem; pathname: string; onClick: () => void }) {
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+function NavLink({
+  item,
+  pathname,
+  onClick,
+  count,
+}: {
+  item: NavItem;
+  pathname: string;
+  onClick: () => void;
+  count?: number;
+}) {
+  const itemPath = item.href.split("?")[0];
+  const active = pathname === itemPath || pathname.startsWith(`${itemPath}/`);
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       onClick={onClick}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
         active ? "bg-brand-soft text-brand" : "text-ink-soft hover:bg-surface-sunk",
       )}
     >
       <Icon className="h-4 w-4" />
-      {item.label}
+      <span className="flex-1 truncate text-left">{item.label}</span>
+      {!!count && (
+        <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold tnum text-brand">
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
@@ -30,10 +47,12 @@ export function MobileNav({
   tenantName,
   permissions,
   isPlatformAdmin,
+  counts = {},
 }: {
   tenantName: string;
   permissions: string[];
   isPlatformAdmin: boolean;
+  counts?: Record<string, number>;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -68,7 +87,13 @@ export function MobileNav({
                 </p>
               )}
               {group.items.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} onClick={() => setOpen(false)} />
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  onClick={() => setOpen(false)}
+                  count={item.countKey ? counts[item.countKey] : undefined}
+                />
               ))}
             </div>
           ))}

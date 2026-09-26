@@ -167,9 +167,9 @@ section states the requirement, not the implementation.
 
 ### 8.1 Case & PR
 - FR‑1 (P0): Every request is assigned a permanent, human-readable Case ID
-  (`CASE-{year}-{sequence}`) at creation, independent of tenant numbering
-  preferences (tenant may configure the display format; the internal ID
-  never changes).
+  (`PR-{year}-{sequence}`, tenant-configurable — see ARCHITECTURE.md §19)
+  at creation, independent of tenant numbering preferences (tenant may
+  configure the display format; the internal ID never changes).
 - FR‑2 (P0): A PR carries items/services, quantities, specification,
   estimated cost, currency, required date, priority, justification, budget
   reference, department/branch/business-unit/cost-centre, and attachments.
