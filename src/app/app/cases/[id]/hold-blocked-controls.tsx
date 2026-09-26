@@ -6,6 +6,7 @@ import { PauseCircle, ShieldAlert } from "lucide-react";
 import { setCaseHold, setCaseBlocked } from "../actions";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
+import { Modal, ModalFormActions } from "@/components/ui/modal";
 
 /**
  * On hold / blocked are flags orthogonal to the status pipeline (a case can
@@ -62,47 +63,51 @@ export function HoldBlockedControls({
         </div>
       )}
 
-      {prompt ? (
-        <div className="flex flex-col items-end gap-2 rounded-lg border border-line p-3">
+      <div className="flex flex-wrap gap-2">
+        {onHold ? (
+          <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("hold", false, "")}>
+            Release hold
+          </Button>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setPrompt("hold")}>
+            Put on hold
+          </Button>
+        )}
+        {blocked ? (
+          <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("blocked", false, "")}>
+            Clear blocked
+          </Button>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setPrompt("blocked")}>
+            Mark blocked
+          </Button>
+        )}
+      </div>
+
+      <Modal
+        open={prompt !== null}
+        onClose={() => setPrompt(null)}
+        title={prompt === "hold" ? "Put case on hold" : "Mark case blocked"}
+        dismissible={!pending}
+        size="sm"
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (prompt) toggle(prompt, true, reason);
+          }}
+          className="flex flex-col gap-3"
+        >
           <TextInput
             label={prompt === "hold" ? "Reason for hold" : "Reason for block"}
             hint="Optional"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full"
           />
           {error && <p className="text-xs text-critical">{error}</p>}
-          <div className="flex gap-2">
-            <Button size="sm" busy={pending} onClick={() => toggle(prompt, true, reason)}>
-              Confirm
-            </Button>
-            <button type="button" onClick={() => setPrompt(null)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {onHold ? (
-            <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("hold", false, "")}>
-              Release hold
-            </Button>
-          ) : (
-            <Button size="sm" variant="secondary" onClick={() => setPrompt("hold")}>
-              Put on hold
-            </Button>
-          )}
-          {blocked ? (
-            <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("blocked", false, "")}>
-              Clear blocked
-            </Button>
-          ) : (
-            <Button size="sm" variant="secondary" onClick={() => setPrompt("blocked")}>
-              Mark blocked
-            </Button>
-          )}
-        </div>
-      )}
+          <ModalFormActions onCancel={() => setPrompt(null)} submitLabel="Confirm" busy={pending} />
+        </form>
+      </Modal>
     </div>
   );
 }

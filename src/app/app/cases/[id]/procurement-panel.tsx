@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Copy, Mail, Check, AlertTriangle } from "lucide-react";
+import { Download, Copy, Mail, Check, AlertTriangle, ShoppingCart } from "lucide-react";
 import {
   inviteSupplierToRfq,
   inviteProspectToRfq,
@@ -16,6 +16,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
+import { Modal, ModalFormActions } from "@/components/ui/modal";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
@@ -35,12 +36,14 @@ export function ProcurementPanel({
   canInvite,
   canAward,
   canApprovePO,
+  emphasize,
 }: {
   detail: ProcurementDetail;
   suppliers: Supplier[];
   canInvite: boolean;
   canAward: boolean;
   canApprovePO: boolean;
+  emphasize?: boolean;
 }) {
   const router = useRouter();
   const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
@@ -60,6 +63,7 @@ export function ProcurementPanel({
   const [shareMsg, setShareMsg] = useState<Record<string, { text: string; error: boolean }>>({});
   const [sharePending, startShare] = useTransition();
 
+  const [recordingQuote, setRecordingQuote] = useState(false);
   const [quoteState, quoteAction, quotePending] = useActionState(recordQuotation, initialQuotation);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
@@ -70,7 +74,10 @@ export function ProcurementPanel({
   const [approveError, setApproveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (quoteState.ok) router.refresh();
+    if (quoteState.ok) {
+      setRecordingQuote(false);
+      router.refresh();
+    }
   }, [quoteState.ok, router]);
 
   function invite(supplierId: string) {
@@ -137,17 +144,23 @@ export function ProcurementPanel({
     });
   }
 
+  const awardingQuote = quotations.find((q) => q.id === awardingId);
+
   if (po) {
     return (
-      <Card>
+      <Card raised={emphasize}>
         <CardHeader
           title="Purchase order"
           subtitle={po.po_number}
+          icon={emphasize ? <ShoppingCart className="h-4 w-4" /> : undefined}
           action={
-            <ButtonLink href={`/api/export/po/${po.id}`} variant="secondary" size="sm">
-              <Download className="h-3.5 w-3.5" />
-              PDF
-            </ButtonLink>
+            <div className="flex items-center gap-2">
+              {emphasize && <Badge tone="brand">Current stage</Badge>}
+              <ButtonLink href={`/api/export/po/${po.id}`} variant="secondary" size="sm">
+                <Download className="h-3.5 w-3.5" />
+                PDF
+              </ButtonLink>
+            </div>
           }
         />
         <CardBody className="flex flex-col gap-2 text-sm">
@@ -176,8 +189,13 @@ export function ProcurementPanel({
   }
 
   return (
-    <Card>
-      <CardHeader title="Procurement" subtitle={rfq.title} />
+    <Card raised={emphasize}>
+      <CardHeader
+        title="Procurement"
+        subtitle={rfq.title}
+        icon={emphasize ? <ShoppingCart className="h-4 w-4" /> : undefined}
+        action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
+      />
       <CardBody className="flex flex-col gap-5">
         {canInvite && (
           <div>
@@ -202,26 +220,24 @@ export function ProcurementPanel({
             {inviteError && <p className="mt-1 text-xs text-critical">{inviteError}</p>}
 
             <div className="mt-3">
-              {sourcing ? (
-                <div className="flex flex-col gap-2 rounded-lg border border-line p-3 sm:flex-row sm:items-end sm:flex-wrap">
-                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} hint=" " className="flex-1" />
-                  <TextInput label="Email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} hint="Optional" className="flex-1" />
-                  <TextInput label="Phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} hint="Optional, for WhatsApp" className="flex-1" />
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" busy={prospectPending} onClick={addProspect}>
-                      Source
-                    </Button>
-                    <button type="button" onClick={() => setSourcing(false)} className="text-sm font-semibold text-ink-faint hover:text-ink">
-                      Cancel
-                    </button>
-                  </div>
-                  {prospectError && <p className="w-full text-xs text-critical">{prospectError}</p>}
-                </div>
-              ) : (
-                <button type="button" onClick={() => setSourcing(true)} className="text-xs font-semibold text-brand hover:underline">
-                  + Source a new supplier not yet in the system
-                </button>
-              )}
+              <button type="button" onClick={() => setSourcing(true)} className="text-xs font-semibold text-brand hover:underline">
+                + Source a new supplier not yet in the system
+              </button>
+              <Modal open={sourcing} onClose={() => setSourcing(false)} title="Source a new supplier" dismissible={!prospectPending} size="sm">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addProspect();
+                  }}
+                  className="flex flex-col gap-3"
+                >
+                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} />
+                  <TextInput label="Email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} hint="Optional" />
+                  <TextInput label="Phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} hint="Optional, for WhatsApp" />
+                  {prospectError && <p className="text-xs text-critical">{prospectError}</p>}
+                  <ModalFormActions onCancel={() => setSourcing(false)} submitLabel="Source" busy={prospectPending} />
+                </form>
+              </Modal>
             </div>
           </div>
         )}
@@ -278,26 +294,28 @@ export function ProcurementPanel({
 
         {canInvite && invitedSupplierIds.length > 0 && (
           <div>
-            <p className="mb-2 text-sm font-semibold text-ink">Record a quotation</p>
-            <form action={quoteAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <input type="hidden" name="rfq_id" value={rfq.id} />
-              <input type="hidden" name="case_id" value={rfq.case_id} />
-              <SelectInput label="Supplier" name="supplier_id" required className="flex-1">
-                <option value="">Choose</option>
-                {suppliers
-                  .filter((s) => invitedSet.has(s.id))
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </SelectInput>
-              <NumberInput label="Total quoted" name="total" unit="KES" decimals required className="sm:w-40" />
-              <Button type="submit" size="sm" busy={quotePending}>
-                Record
-              </Button>
-            </form>
-            {quoteState.error && <p className="mt-1 text-xs text-critical">{quoteState.error}</p>}
+            <Button size="sm" variant="secondary" onClick={() => setRecordingQuote(true)}>
+              Record a quotation
+            </Button>
+            <Modal open={recordingQuote} onClose={() => setRecordingQuote(false)} title="Record a quotation" dismissible={!quotePending} size="sm">
+              <form action={quoteAction} className="flex flex-col gap-3">
+                <input type="hidden" name="rfq_id" value={rfq.id} />
+                <input type="hidden" name="case_id" value={rfq.case_id} />
+                <SelectInput label="Supplier" name="supplier_id" required>
+                  <option value="">Choose</option>
+                  {suppliers
+                    .filter((s) => invitedSet.has(s.id))
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </SelectInput>
+                <NumberInput label="Total quoted" name="total" unit="KES" decimals required />
+                {quoteState.error && <p className="text-xs text-critical">{quoteState.error}</p>}
+                <ModalFormActions onCancel={() => setRecordingQuote(false)} submitLabel="Record" busy={quotePending} />
+              </form>
+            </Modal>
           </div>
         )}
 
@@ -315,39 +333,43 @@ export function ProcurementPanel({
                       {formatMoney(q.total_cents, { currency: q.currency })} · {formatDate(q.submitted_at)}
                     </p>
                   </div>
-                  {canAward &&
-                    (awardingId === q.id ? (
-                      <div className="flex flex-col items-end gap-1.5">
-                        <TextInput
-                          label=""
-                          aria-label="Expected delivery date"
-                          type="date"
-                          value={expectedDelivery}
-                          onChange={(e) => setExpectedDelivery(e.target.value)}
-                          hint="Expected delivery — optional"
-                          className="w-56"
-                        />
-                        <TextArea label="" aria-label="Award notes" value={awardNotes} onChange={(e) => setAwardNotes(e.target.value)} hint="Optional note" className="w-56" rows={2} />
-                        <div className="flex gap-2">
-                          <Button size="sm" busy={awardPending} onClick={() => confirmAward(q.id)}>
-                            Confirm award
-                          </Button>
-                          <button type="button" onClick={() => setAwardingId(null)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button size="sm" variant="secondary" onClick={() => setAwardingId(q.id)}>
-                        Award
-                      </Button>
-                    ))}
+                  {canAward && (
+                    <Button size="sm" variant="secondary" onClick={() => setAwardingId(q.id)}>
+                      Award
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
             {awardError && <p className="mt-1 text-xs text-critical">{awardError}</p>}
           </div>
         )}
+
+        <Modal
+          open={awardingId !== null}
+          onClose={() => setAwardingId(null)}
+          title={`Award this quotation${awardingQuote ? ` — ${awardingQuote.supplier_name}` : ""}`}
+          dismissible={!awardPending}
+          size="sm"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (awardingId) confirmAward(awardingId);
+            }}
+            className="flex flex-col gap-3"
+          >
+            <TextInput
+              label="Expected delivery"
+              type="date"
+              value={expectedDelivery}
+              onChange={(e) => setExpectedDelivery(e.target.value)}
+              hint="Optional"
+            />
+            <TextArea label="Notes" value={awardNotes} onChange={(e) => setAwardNotes(e.target.value)} hint="Optional" rows={2} />
+            <ModalFormActions onCancel={() => setAwardingId(null)} submitLabel="Confirm award" busy={awardPending} />
+          </form>
+        </Modal>
       </CardBody>
     </Card>
   );

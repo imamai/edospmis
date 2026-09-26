@@ -20,6 +20,9 @@ import { StageTimingCard } from "./stage-timing-card";
 import { HoldBlockedControls } from "./hold-blocked-controls";
 import { CancelCaseButton } from "./cancel-case-button";
 import { CloseCaseButton } from "./close-case-button";
+import { CaseSummaryHeader } from "./case-summary-header";
+import { NextActionBanner } from "./next-action-banner";
+import { PANEL_STAGE_KEYS, isCurrentStage } from "@/lib/stage-labels";
 
 const TERMINAL_CASE_STATUSES = ["closed", "rejected", "returned", "cancelled"];
 
@@ -76,9 +79,21 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const currentStage = stageDurations[stageDurations.length - 1];
   const currentStageDueAt = currentStage ? await getCurrentStageDueAt(session.tenant.id, c.current_stage_key, currentStage.entered_at) : null;
   const currentStageSla = currentStageDueAt ? slaStatus(currentStageDueAt) : null;
+  const stageDateMap = Object.fromEntries(stageDurations.map((d) => [d.stage_key, d.entered_at]));
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <CaseSummaryHeader
+        caseNumber={c.case_number}
+        title={pr.title}
+        requesterName={requesterName}
+        amountCents={pr.estimated_cost_cents}
+        currency={pr.currency}
+        openedAt={c.opened_at}
+        status={c.status}
+        statusTone={STATUS_TONE[c.status]}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{c.case_number}</p>
@@ -108,6 +123,16 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      <NextActionBanner
+        session={session}
+        canDecide={canDecide}
+        pendingApprovalRoleName={pendingApproval?.role_name ?? null}
+        pendingApprovalDueAt={pendingTaskDueAt}
+        procurementDetail={procurementDetail}
+        fulfilmentDetail={fulfilmentDetail}
+        financeDetail={financeDetail}
+      />
+
       {canHold && (
         <HoldBlockedControls caseId={c.id} onHold={c.on_hold} onHoldReason={c.on_hold_reason} blocked={c.blocked} blockedReason={c.blocked_reason} />
       )}
@@ -134,6 +159,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             terminal={
               c.status in TERMINAL_LABEL ? { key: c.status, label: TERMINAL_LABEL[c.status] } : null
             }
+            stageDates={stageDateMap}
           />
         </CardBody>
       </Card>
@@ -228,6 +254,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           canInvite={can(session, "procurement.rfq.send")}
           canAward={can(session, "procurement.po.issue")}
           canApprovePO={can(session, "procurement.po.approve")}
+          emphasize={isCurrentStage(PANEL_STAGE_KEYS.procurement, c.current_stage_key)}
         />
       )}
 
@@ -238,6 +265,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           detail={fulfilmentDetail}
           canRecord={can(session, "receiving.grn.create")}
           canInspect={can(session, "receiving.grn.approve")}
+          emphasize={isCurrentStage(PANEL_STAGE_KEYS.receiving, c.current_stage_key)}
         />
       )}
 
@@ -250,6 +278,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           canSubmit={can(session, "finance.invoice.create")}
           canApprove={can(session, "finance.invoice.approve")}
           canRecordPayment={can(session, "finance.payment.approve")}
+          emphasize={isCurrentStage(PANEL_STAGE_KEYS.finance, c.current_stage_key)}
         />
       )}
 
@@ -263,6 +292,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           canAssign={can(session, "delivery.assign")}
           canDispatch={can(session, "delivery.dispatch")}
           canComplete={can(session, "delivery.complete")}
+          emphasize={isCurrentStage(PANEL_STAGE_KEYS.delivery, c.current_stage_key)}
         />
       )}
 

@@ -1,23 +1,7 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { StageDuration } from "@/lib/data/cases";
-
-const STAGE_LABEL: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  approval: "Approval",
-  approved: "Approved",
-  rejected: "Rejected",
-  returned: "Returned",
-  cancelled: "Cancelled",
-  procurement: "Procurement",
-  po_approval: "PO Approval",
-  awarded: "Awarded",
-  receiving: "Receiving",
-  finance: "Finance",
-  delivery: "Delivery",
-  closed: "Completed",
-};
+import { STAGE_LABEL } from "@/lib/stage-labels";
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;

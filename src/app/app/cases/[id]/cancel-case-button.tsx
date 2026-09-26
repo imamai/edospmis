@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { cancelCase } from "../actions";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
+import { Modal, ModalFormActions } from "@/components/ui/modal";
 
 export function CancelCaseButton({ caseId }: { caseId: string }) {
   const router = useRouter();
@@ -17,30 +18,37 @@ export function CancelCaseButton({ caseId }: { caseId: string }) {
     start(async () => {
       const result = await cancelCase(caseId, reason);
       if (result.error) setError(result.error);
-      else router.refresh();
+      else {
+        setOpen(false);
+        router.refresh();
+      }
     });
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <Button variant="ghost" onClick={() => setOpen(true)}>
         Cancel case
       </Button>
-    );
-  }
-
-  return (
-    <div className="flex w-full max-w-sm flex-col items-end gap-2 rounded-lg border border-line p-3">
-      <TextInput label="Reason" name="reason" hint="Optional" value={reason} onChange={(e) => setReason(e.target.value)} className="w-full" />
-      {error && <p className="text-xs text-critical">{error}</p>}
-      <div className="flex gap-2">
-        <Button size="sm" variant="danger" busy={pending} onClick={submit}>
-          Confirm cancel
-        </Button>
-        <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-          Back
-        </button>
-      </div>
-    </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Cancel this case" dismissible={!pending} size="sm">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+          className="flex flex-col gap-3"
+        >
+          <TextInput
+            label="Reason"
+            name="reason"
+            hint="Optional"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          {error && <p className="text-xs text-critical">{error}</p>}
+          <ModalFormActions onCancel={() => setOpen(false)} submitLabel="Confirm cancel" busy={pending} danger />
+        </form>
+      </Modal>
+    </>
   );
 }

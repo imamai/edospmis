@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2, Receipt } from "lucide-react";
 import {
   submitInvoice,
   resolveMatchException,
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, TextArea, TextInput } from "@/components/ui/field";
+import { Modal, ModalFormActions } from "@/components/ui/modal";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { FinanceDetail } from "@/lib/data/finance";
 import type { PRItem } from "@/lib/database.types";
@@ -45,6 +46,7 @@ export function FinancePanel({
   canSubmit,
   canApprove,
   canRecordPayment,
+  emphasize,
 }: {
   caseId: string;
   poItems: PRItem[];
@@ -53,6 +55,7 @@ export function FinancePanel({
   canSubmit: boolean;
   canApprove: boolean;
   canRecordPayment: boolean;
+  emphasize?: boolean;
 }) {
   const router = useRouter();
   const invoice = detail.invoice;
@@ -127,75 +130,76 @@ export function FinancePanel({
     });
   }
 
+  const resolvingException = invoice?.exceptions.find((ex) => ex.id === resolvingId);
+
   return (
-    <Card>
-      <CardHeader title="Finance" subtitle="Invoice capture and three-way match" />
+    <Card raised={emphasize}>
+      <CardHeader
+        title="Finance"
+        subtitle="Invoice capture and three-way match"
+        icon={emphasize ? <Receipt className="h-4 w-4" /> : undefined}
+        action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
+      />
       <CardBody className="flex flex-col gap-4">
         {!invoice && canSubmit && (
-          submitting ? (
-            <form onSubmit={submitForm} className="flex flex-col gap-3 rounded-lg border border-line p-3">
-              <input type="hidden" name="case_id" value={caseId} />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <TextInput label="Supplier invoice #" name="invoice_number" required />
-                <TextInput label="Payment terms" name="payment_terms" placeholder="e.g. Net 30" hint="Optional" />
-                <TextInput label="Due date" name="due_date" type="date" hint="Optional" />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink">Line items</p>
-                <button
-                  type="button"
-                  onClick={() => setRows((r) => [...r, { id: nextId++, description: "", unit: "", qty: 1, unitCost: 0 }])}
-                  className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add item
-                </button>
-              </div>
-              {rows.map((row, i) => (
-                <div key={row.id} className="grid grid-cols-12 items-end gap-2">
-                  <div className="col-span-12 sm:col-span-5">
-                    <TextInput label={i === 0 ? "Item" : ""} name="item_description" defaultValue={row.description} />
-                  </div>
-                  <div className="col-span-3 sm:col-span-2">
-                    <TextInput label={i === 0 ? "Unit" : ""} name="item_unit" defaultValue={row.unit} />
-                  </div>
-                  <div className="col-span-3 sm:col-span-2">
-                    <NumberInput label={i === 0 ? "Qty" : ""} name="item_qty" min={0} decimals defaultValue={row.qty} />
-                  </div>
-                  <div className="col-span-4 sm:col-span-2">
-                    <NumberInput label={i === 0 ? "Unit cost" : ""} name="item_unit_cost" min={0} decimals defaultValue={row.unitCost} />
-                  </div>
-                  {rows.length > 1 && (
-                    <div className="col-span-2 flex justify-end sm:col-span-1">
-                      <button
-                        type="button"
-                        onClick={() => setRows((r) => r.filter((x) => x.id !== row.id))}
-                        aria-label="Remove item"
-                        className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <NumberInput label="Tax" name="tax" min={0} decimals defaultValue={0} unit={currency} />
-              {submitState.error && <p className="text-xs text-critical">{submitState.error}</p>}
-              <div className="flex gap-2">
-                <Button type="submit" size="sm" busy={submitPending}>
-                  Submit invoice
-                </Button>
-                <button type="button" onClick={() => setSubmitting(false)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
+          <>
             <Button size="sm" variant="secondary" onClick={() => setSubmitting(true)}>
               Submit invoice
             </Button>
-          )
+            <Modal open={submitting} onClose={() => setSubmitting(false)} title="Submit invoice" dismissible={!submitPending} size="lg">
+              <form onSubmit={submitForm} className="flex flex-col gap-3">
+                <input type="hidden" name="case_id" value={caseId} />
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <TextInput label="Supplier invoice #" name="invoice_number" required />
+                  <TextInput label="Payment terms" name="payment_terms" placeholder="e.g. Net 30" hint="Optional" />
+                  <TextInput label="Due date" name="due_date" type="date" hint="Optional" />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-ink">Line items</p>
+                  <button
+                    type="button"
+                    onClick={() => setRows((r) => [...r, { id: nextId++, description: "", unit: "", qty: 1, unitCost: 0 }])}
+                    className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add item
+                  </button>
+                </div>
+                {rows.map((row, i) => (
+                  <div key={row.id} className="grid grid-cols-12 items-end gap-2">
+                    <div className="col-span-12 sm:col-span-5">
+                      <TextInput label={i === 0 ? "Item" : ""} name="item_description" defaultValue={row.description} />
+                    </div>
+                    <div className="col-span-3 sm:col-span-2">
+                      <TextInput label={i === 0 ? "Unit" : ""} name="item_unit" defaultValue={row.unit} />
+                    </div>
+                    <div className="col-span-3 sm:col-span-2">
+                      <NumberInput label={i === 0 ? "Qty" : ""} name="item_qty" min={0} decimals defaultValue={row.qty} />
+                    </div>
+                    <div className="col-span-4 sm:col-span-2">
+                      <NumberInput label={i === 0 ? "Unit cost" : ""} name="item_unit_cost" min={0} decimals defaultValue={row.unitCost} />
+                    </div>
+                    {rows.length > 1 && (
+                      <div className="col-span-2 flex justify-end sm:col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => setRows((r) => r.filter((x) => x.id !== row.id))}
+                          aria-label="Remove item"
+                          className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <NumberInput label="Tax" name="tax" min={0} decimals defaultValue={0} unit={currency} />
+                {submitState.error && <p className="text-xs text-critical">{submitState.error}</p>}
+                <ModalFormActions onCancel={() => setSubmitting(false)} submitLabel="Submit invoice" busy={submitPending} />
+              </form>
+            </Modal>
+          </>
         )}
 
         {!invoice && !canSubmit && (
@@ -234,35 +238,34 @@ export function FinancePanel({
                     </div>
                     {ex.resolution_note && <p className="mt-1 text-xs text-ink-soft">&ldquo;{ex.resolution_note}&rdquo;</p>}
                     {ex.status === "open" && canApprove && (
-                      resolvingId === ex.id ? (
-                        <form onSubmit={resolveForm} className="mt-2 flex flex-col gap-2">
-                          <input type="hidden" name="exception_id" value={ex.id} />
-                          <input type="hidden" name="case_id" value={caseId} />
-                          <TextArea label="How was this resolved?" name="resolution_note" rows={2} />
-                          {resolveState.error && <p className="text-xs text-critical">{resolveState.error}</p>}
-                          <div className="flex gap-2">
-                            <Button type="submit" size="sm" busy={resolvePending}>
-                              Save
-                            </Button>
-                            <button type="button" onClick={() => setResolvingId(null)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setResolvingId(ex.id)}
-                          className="mt-2 text-xs font-semibold text-brand hover:underline"
-                        >
-                          Resolve
-                        </button>
-                      )
+                      <button
+                        type="button"
+                        onClick={() => setResolvingId(ex.id)}
+                        className="mt-2 text-xs font-semibold text-brand hover:underline"
+                      >
+                        Resolve
+                      </button>
                     )}
                   </div>
                 ))}
               </div>
             )}
+
+            <Modal
+              open={resolvingId !== null}
+              onClose={() => setResolvingId(null)}
+              title="Resolve match exception"
+              description={resolvingException?.detail}
+              dismissible={!resolvePending}
+            >
+              <form onSubmit={resolveForm} className="flex flex-col gap-3">
+                <input type="hidden" name="exception_id" value={resolvingId ?? ""} />
+                <input type="hidden" name="case_id" value={caseId} />
+                <TextArea label="How was this resolved?" name="resolution_note" rows={2} />
+                {resolveState.error && <p className="text-xs text-critical">{resolveState.error}</p>}
+                <ModalFormActions onCancel={() => setResolvingId(null)} submitLabel="Save" busy={resolvePending} />
+              </form>
+            </Modal>
 
             {invoice.status === "matched" && canApprove && (
               <div className="flex flex-col items-start gap-1">
@@ -274,26 +277,20 @@ export function FinancePanel({
             )}
 
             {invoice.status === "approved" && canRecordPayment && (
-              paying ? (
-                <form onSubmit={payForm} className="flex flex-col gap-2.5 rounded-lg border border-line p-3">
-                  <input type="hidden" name="invoice_id" value={invoice.id} />
-                  <input type="hidden" name="case_id" value={caseId} />
-                  <TextInput label="Payment reference" name="reference" hint="Optional — a transaction ID or cheque number" />
-                  {payState.error && <p className="text-xs text-critical">{payState.error}</p>}
-                  <div className="flex gap-2">
-                    <Button type="submit" size="sm" busy={payPending}>
-                      Record payment
-                    </Button>
-                    <button type="button" onClick={() => setPaying(false)} className="text-xs font-semibold text-ink-faint hover:text-ink">
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
+              <>
                 <Button size="sm" variant="secondary" onClick={() => setPaying(true)}>
                   Record payment
                 </Button>
-              )
+                <Modal open={paying} onClose={() => setPaying(false)} title="Record payment" dismissible={!payPending} size="sm">
+                  <form onSubmit={payForm} className="flex flex-col gap-3">
+                    <input type="hidden" name="invoice_id" value={invoice.id} />
+                    <input type="hidden" name="case_id" value={caseId} />
+                    <TextInput label="Payment reference" name="reference" hint="Optional — a transaction ID or cheque number" />
+                    {payState.error && <p className="text-xs text-critical">{payState.error}</p>}
+                    <ModalFormActions onCancel={() => setPaying(false)} submitLabel="Record payment" busy={payPending} />
+                  </form>
+                </Modal>
+              </>
             )}
 
             {invoice.status === "paid" && (
