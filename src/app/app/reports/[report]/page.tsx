@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronRight, ListFilter } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics, getStageCases } from "@/lib/data/analytics";
 import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
 import { resolvePeriod } from "@/lib/report-period";
+import { REPORT_FILTERS } from "@/lib/report-filters";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ExportLinks } from "@/components/ui/export-links";
-import { PeriodFilterSuspended } from "@/components/ui/period-filter-suspended";
+import { RecordCount } from "@/components/ui/filter-card";
+import { ReportFilterForm } from "./report-filter-form";
 import { STAGE_LABEL } from "@/lib/stage-labels";
 import { formatMoney, formatDate } from "@/lib/utils";
 import { InvoicesTable } from "../invoices-table";
@@ -139,20 +140,11 @@ export default async function ReportDetailPage({
   const procurementStatuses = Array.from(new Set(procurementReportRows.map((r) => r.status)));
   const procurementDepartments = Array.from(new Set(procurementReportRows.map((r) => r.department_name).filter((d): d is string => !!d))).sort();
 
-  const hiddenPeriodInputs = (
-    <>
-      {sp.period && <input type="hidden" name="period" value={sp.period} />}
-      {sp.from && <input type="hidden" name="from" value={sp.from} />}
-      {sp.to && <input type="hidden" name="to" value={sp.to} />}
-    </>
-  );
-
   const aging_statuses = Array.from(new Set(data.aging.map((c) => c.status)));
   const aging_priorities = Array.from(new Set(data.aging.map((c) => c.priority)));
   const all_stages = Array.from(new Set([...data.stageDurations.map((s) => s.stage_key), ...data.slaCompliance.map((s) => s.stage_key)]));
 
-  const clearHref = `/app/reports/${key}${sp.period ? `?period=${sp.period}` : ""}`;
-  const hasActiveFilter = Boolean(sp.q || sp.status || sp.priority || sp.stage || sp.dept);
+  const flags = REPORT_FILTERS[key] ?? { dates: true };
 
   function hrefWithDrill(stageKey: string | null): string {
     const params = new URLSearchParams();
@@ -187,179 +179,37 @@ export default async function ReportDetailPage({
               {meta.subtitle} — over {period.label.toLowerCase()}.
             </p>
           </div>
-          {canExport && (
-            <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
-              <span className="text-xs font-medium text-ink-faint">Download</span>
-              <ExportLinks
-                base={`/api/export/report/${key}${(() => {
-                  const params = new URLSearchParams();
-                  if (sp.period) params.set("period", sp.period);
-                  if (sp.from) params.set("from", sp.from);
-                  if (sp.to) params.set("to", sp.to);
-                  if (sp.q) params.set("q", sp.q);
-                  if (sp.status) params.set("status", sp.status);
-                  if (sp.priority) params.set("priority", sp.priority);
-                  if (sp.stage) params.set("stage", sp.stage);
-                  if (sp.dept) params.set("dept", sp.dept);
-                  const qs = params.toString();
-                  return qs ? `?${qs}` : "";
-                })()}`}
-              />
-            </div>
-          )}
         </div>
       </div>
 
-      <PeriodFilterSuspended activeKey={period.key} />
-
-      <Card>
-        <CardHeader title="Filters" icon={<ListFilter className="h-4 w-4" />} />
-        <CardBody>
-          <form method="get" className="flex flex-wrap items-end gap-3">
-            {hiddenPeriodInputs}
-            {(key === "aging" || key === "supplier-performance" || key === "spend-by-category" || isProcurementReportKey(key)) && (
-              <div className="flex min-w-[12rem] flex-1 flex-col gap-1.5">
-                <label htmlFor="q" className="text-sm font-medium text-ink">
-                  Search
-                </label>
-                <input
-                  id="q"
-                  name="q"
-                  defaultValue={sp.q ?? ""}
-                  placeholder={
-                    key === "aging"
-                      ? "PR number or title"
-                      : key === "supplier-performance"
-                        ? "Supplier name"
-                        : key === "spend-by-category"
-                          ? "Category name"
-                          : key === "rfqs"
-                            ? "PR number or RFQ title"
-                            : key === "purchase-orders"
-                              ? "PO number, PR number or supplier"
-                              : key === "goods-received"
-                                ? "GRN number, PO number or PR number"
-                                : "Invoice number, PR number or supplier"
-                  }
-                  className="h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none"
-                />
-              </div>
-            )}
-            {isProcurementReportKey(key) && (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="status" className="text-sm font-medium text-ink">
-                    Status
-                  </label>
-                  <select
-                    id="status"
-                    name="status"
-                    defaultValue={statusFilter}
-                    className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
-                  >
-                    <option value="">Any status</option>
-                    {procurementStatuses.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="dept" className="text-sm font-medium text-ink">
-                    Department
-                  </label>
-                  <select
-                    id="dept"
-                    name="dept"
-                    defaultValue={deptFilter}
-                    className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
-                  >
-                    <option value="">All departments</option>
-                    {procurementDepartments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-            {(key === "stage-durations" || key === "sla-compliance") && (
-              <div className="flex min-w-[12rem] flex-col gap-1.5">
-                <label htmlFor="stage" className="text-sm font-medium text-ink">
-                  Stage
-                </label>
-                <select
-                  id="stage"
-                  name="stage"
-                  defaultValue={stageFilter}
-                  className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
-                >
-                  <option value="">Every stage</option>
-                  {all_stages.map((s) => (
-                    <option key={s} value={s}>
-                      {STAGE_LABEL[s] ?? s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {key === "aging" && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="status" className="text-sm font-medium text-ink">
-                      Status
-                    </label>
-                    <select
-                      id="status"
-                      name="status"
-                      defaultValue={statusFilter}
-                      className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
-                    >
-                      <option value="">Any status</option>
-                      {aging_statuses.map((s) => (
-                        <option key={s} value={s}>
-                          {STAGE_LABEL[s] ?? s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="priority" className="text-sm font-medium text-ink">
-                      Priority
-                    </label>
-                    <select
-                      id="priority"
-                      name="priority"
-                      defaultValue={priorityFilter}
-                      className="h-11 rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink focus:border-brand focus:outline-none"
-                    >
-                      <option value="">Any priority</option>
-                      {aging_priorities.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-            <button type="submit" className="h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-mid">
-              Apply
-            </button>
-            {hasActiveFilter && (
-              <Link href={clearHref} className="text-sm font-semibold text-ink-faint hover:text-ink">
-                Clear
-              </Link>
-            )}
-          </form>
-        </CardBody>
-      </Card>
+      <ReportFilterForm
+        reportKey={key}
+        flags={flags}
+        initial={{
+          period: sp.period ?? "all",
+          from: sp.from ?? "",
+          to: sp.to ?? "",
+          q: sp.q ?? "",
+          status: statusFilter,
+          priority: priorityFilter,
+          stage: stageFilter,
+          dept: deptFilter,
+        }}
+        options={{
+          statuses: isProcurementReportKey(key)
+            ? procurementStatuses.map((s) => ({ value: s, label: s }))
+            : aging_statuses.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
+          priorities: aging_priorities,
+          stages: all_stages.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
+          departments: procurementDepartments,
+        }}
+        canExport={canExport}
+        periodLabel={period.label}
+      />
 
       {key === "aging" && (
         <Card>
-          <CardHeader title={`${filteredAging.length} of ${data.aging.length} open`} />
+          <CardHeader title={"Open requests, oldest first"} />
           <CardBody className="overflow-x-auto">
             {filteredAging.length === 0 ? (
               <p className="text-sm text-ink-faint">Nothing matches these filters.</p>
@@ -397,6 +247,7 @@ export default async function ReportDetailPage({
                 </tbody>
               </table>
             )}
+            <RecordCount shown={filteredAging.length} total={data.aging.length} noun="open request" />
           </CardBody>
         </Card>
       )}
@@ -442,6 +293,7 @@ export default async function ReportDetailPage({
                   );
                 })}
             </div>
+            <RecordCount shown={filteredStageDurations.length} total={data.stageDurations.length} noun="stage" />
           </CardBody>
         </Card>
       )}
@@ -520,6 +372,7 @@ export default async function ReportDetailPage({
                 );
               })}
             </div>
+            <RecordCount shown={filteredSlaCompliance.length} total={data.slaCompliance.length} noun="stage" />
           </CardBody>
         </Card>
       )}
@@ -568,6 +421,7 @@ export default async function ReportDetailPage({
                 )}
               </tbody>
             </table>
+            <RecordCount shown={filteredSuppliers.length} total={data.supplierPerformance.length} noun="supplier" />
           </CardBody>
         </Card>
       )}
@@ -597,13 +451,14 @@ export default async function ReportDetailPage({
                 })
               )}
             </div>
+            <RecordCount shown={filteredCategories.length} total={data.spendByCategory.length} noun="category" plural="categories" />
           </CardBody>
         </Card>
       )}
 
       {key === "rfqs" && (
         <Card>
-          <CardHeader title={`${filteredRfqs.length} of ${rfqRows.length}`} />
+          <CardHeader title={"RFQs raised in this period"} />
           <CardBody className="overflow-x-auto">
             {filteredRfqs.length === 0 ? (
               <p className="text-sm text-ink-faint">{rfqRows.length === 0 ? "No RFQs raised in this period." : "Nothing matches these filters."}</p>
@@ -641,13 +496,14 @@ export default async function ReportDetailPage({
                 </tbody>
               </table>
             )}
+            <RecordCount shown={filteredRfqs.length} total={rfqRows.length} noun="RFQ" />
           </CardBody>
         </Card>
       )}
 
       {key === "purchase-orders" && (
         <Card>
-          <CardHeader title={`${filteredPos.length} of ${poRows.length}`} />
+          <CardHeader title={"Purchase orders issued in this period"} />
           <CardBody className="overflow-x-auto">
             {filteredPos.length === 0 ? (
               <p className="text-sm text-ink-faint">{poRows.length === 0 ? "No purchase orders issued in this period." : "Nothing matches these filters."}</p>
@@ -698,13 +554,14 @@ export default async function ReportDetailPage({
                 </tbody>
               </table>
             )}
+            <RecordCount shown={filteredPos.length} total={poRows.length} noun="purchase order" />
           </CardBody>
         </Card>
       )}
 
       {key === "goods-received" && (
         <Card>
-          <CardHeader title={`${filteredGrns.length} of ${grnRows.length}`} />
+          <CardHeader title={"Goods received in this period"} />
           <CardBody className="overflow-x-auto">
             {filteredGrns.length === 0 ? (
               <p className="text-sm text-ink-faint">{grnRows.length === 0 ? "No goods received in this period." : "Nothing matches these filters."}</p>
@@ -740,19 +597,21 @@ export default async function ReportDetailPage({
                 </tbody>
               </table>
             )}
+            <RecordCount shown={filteredGrns.length} total={grnRows.length} noun="goods receipt" />
           </CardBody>
         </Card>
       )}
 
       {key === "invoices" && (
         <Card>
-          <CardHeader title={`${filteredInvoices.length} of ${invoiceRows.length}`} />
+          <CardHeader title={"Invoices submitted in this period"} />
           <CardBody className="overflow-x-auto">
             {filteredInvoices.length === 0 ? (
               <p className="text-sm text-ink-faint">{invoiceRows.length === 0 ? "No invoices submitted in this period." : "Nothing matches these filters."}</p>
             ) : (
               <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} />
             )}
+            <RecordCount shown={filteredInvoices.length} total={invoiceRows.length} noun="invoice" />
           </CardBody>
         </Card>
       )}
