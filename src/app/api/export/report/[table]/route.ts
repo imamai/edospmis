@@ -57,10 +57,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
       case "stage-durations":
         return {
           title: "Time in each stage",
-          header: ["Stage", "Cases seen", "Currently in", "Avg minutes"],
+          header: ["Stage", "Cases seen", "Currently in", "Avg minutes", "Waiting now (min)"],
           rows: data!.stageDurations
             .filter((s) => !stageFilter || s.stage_key === stageFilter)
-            .map((s) => [STAGE_LABEL[s.stage_key] ?? s.stage_key, s.cases_seen, s.currently_in, Math.round(s.avg_minutes)]),
+            .map((s) => [
+              STAGE_LABEL[s.stage_key] ?? s.stage_key,
+              s.cases_seen,
+              s.currently_in,
+              s.avg_minutes === null ? "" : Math.round(s.avg_minutes),
+              s.open_avg_minutes === null ? "" : Math.round(s.open_avg_minutes),
+            ]),
         };
       case "sla-compliance":
         return {

@@ -49,13 +49,15 @@ export default async function AnalyticsPage({
             <StageDurationsChart
               height={280}
               data={[...data.stageDurations]
-                .sort((a, b) => b.avg_minutes - a.avg_minutes)
-                .map((s) => ({ stage_key: s.stage_key, label: STAGE_LABEL[s.stage_key] ?? s.stage_key, avg_minutes: s.avg_minutes }))}
+                .filter((s) => s.avg_minutes !== null)
+                .sort((a, b) => (b.avg_minutes ?? 0) - (a.avg_minutes ?? 0))
+                .map((s) => ({ stage_key: s.stage_key, label: STAGE_LABEL[s.stage_key] ?? s.stage_key, avg_minutes: s.avg_minutes ?? 0 }))}
             />
             <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Typically handled by</p>
               {[...data.stageDurations]
-                .sort((a, b) => b.avg_minutes - a.avg_minutes)
+                .filter((s) => s.avg_minutes !== null)
+                .sort((a, b) => (b.avg_minutes ?? 0) - (a.avg_minutes ?? 0))
                 .map((s) => {
                   const roles = ownersByStage.get(s.stage_key) ?? [];
                   return (

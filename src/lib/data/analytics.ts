@@ -6,7 +6,13 @@ export interface StageDurationReport {
   stage_key: string;
   cases_seen: number;
   currently_in: number;
-  avg_minutes: number;
+  /** Average over passes that actually finished. Null for a terminal stage
+   * (Completed/Rejected/Cancelled), which a case never leaves, so there is no
+   * dwell time to measure — see migration 0036. */
+  avg_minutes: number | null;
+  /** How long the cases sitting in this stage right now have been waiting.
+   * Null when nothing is here, and for terminal stages. */
+  open_avg_minutes: number | null;
 }
 
 export interface SlaComplianceReport {

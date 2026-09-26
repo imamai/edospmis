@@ -73,8 +73,9 @@ export default async function DashboardPage({
             <StageDurationsChart
               height={260}
               data={[...data.stageDurations]
-                .sort((a, b) => b.avg_minutes - a.avg_minutes)
-                .map((s) => ({ stage_key: s.stage_key, label: STAGE_LABEL[s.stage_key] ?? s.stage_key, avg_minutes: s.avg_minutes }))}
+                .filter((s) => s.avg_minutes !== null)
+                .sort((a, b) => (b.avg_minutes ?? 0) - (a.avg_minutes ?? 0))
+                .map((s) => ({ stage_key: s.stage_key, label: STAGE_LABEL[s.stage_key] ?? s.stage_key, avg_minutes: s.avg_minutes ?? 0 }))}
             />
           </CardBody>
         </Card>

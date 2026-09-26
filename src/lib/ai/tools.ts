@@ -69,7 +69,10 @@ export const TOOLS: Tool[] = [
         stage: s.stage_key,
         cases_seen: s.cases_seen,
         currently_in_this_stage: s.currently_in,
-        avg_days: daysFromMinutes(s.avg_minutes),
+        // Null for a terminal stage a case never leaves — say so rather than
+        // hand the model a zero it would report as "no time spent".
+        avg_days: s.avg_minutes === null ? null : daysFromMinutes(s.avg_minutes),
+        avg_days_waiting_now: s.open_avg_minutes === null ? null : daysFromMinutes(s.open_avg_minutes),
       }));
     },
   },

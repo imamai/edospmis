@@ -65,6 +65,19 @@ export const TERMINAL_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+/**
+ * Stages a case never leaves, so a stage-history row for one keeps `left_at`
+ * null forever. Anything measuring dwell time has to special-case these, or it
+ * reports "how long ago the case ended" as though it were work in progress —
+ * see migration 0036. `returned` is deliberately absent: a returned case goes
+ * back to draft, so that pass does end.
+ */
+export const TERMINAL_STAGE_KEYS = ["closed", "rejected", "cancelled"] as const;
+
+export function isTerminalStage(stageKey: string): boolean {
+  return (TERMINAL_STAGE_KEYS as readonly string[]).includes(stageKey);
+}
+
 /** Which stage keys make each case-detail panel "the one currently in play". */
 export const PANEL_STAGE_KEYS = {
   approval: ["approval"],

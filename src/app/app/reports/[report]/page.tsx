@@ -10,7 +10,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RecordCount } from "@/components/ui/filter-card";
 import { ReportFilterForm } from "./report-filter-form";
-import { STAGE_LABEL } from "@/lib/stage-labels";
+import { STAGE_LABEL, isTerminalStage } from "@/lib/stage-labels";
 import { formatMoney, formatDate } from "@/lib/utils";
 import { InvoicesTable } from "../invoices-table";
 import { PdfLinkButton } from "@/components/ui/pdf-link-button";
@@ -254,12 +254,12 @@ export default async function ReportDetailPage({
 
       {key === "stage-durations" && (
         <Card>
-          <CardHeader title="Time in each stage" subtitle="Click a stage to see the individual cases behind its average" />
+          <CardHeader title="Time in each stage" subtitle="Averaged over passes that finished. A terminal stage shows no average — a case never leaves it. Click a stage for the cases behind its number." />
           <CardBody className="flex flex-col gap-3">
             <div className="flex flex-col divide-y divide-line">
               {filteredStageDurations.length === 0 && <p className="py-4 text-sm text-ink-faint">Nothing matches this stage.</p>}
               {filteredStageDurations
-                .sort((a, b) => b.avg_minutes - a.avg_minutes)
+                .sort((a, b) => (b.avg_minutes ?? -1) - (a.avg_minutes ?? -1))
                 .map((s) => {
                   const roles = stageOwnersByKey.get(s.stage_key) ?? [];
                   const active = drillStage === s.stage_key;
@@ -284,7 +284,21 @@ export default async function ReportDetailPage({
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="text-xs text-ink-faint">{s.cases_seen} case{s.cases_seen === 1 ? "" : "s"} seen</span>
                         {s.currently_in > 0 && <Badge tone="info">{s.currently_in} now here</Badge>}
-                        <span className="tnum text-sm font-medium text-ink-soft">{formatMinutes(s.avg_minutes)} avg</span>
+                        {s.open_avg_minutes !== null && s.currently_in > 0 && (
+                          <span className="tnum text-xs text-ink-faint">waiting {formatMinutes(s.open_avg_minutes)}</span>
+                        )}
+                        <span className="tnum text-sm font-medium text-ink-soft">
+                          {s.avg_minutes !== null ? (
+                            `${formatMinutes(s.avg_minutes)} avg`
+                          ) : isTerminalStage(s.stage_key) ? (
+                            // Nothing to measure: a case that reaches here stops.
+                            <span className="text-ink-faint">end state</span>
+                          ) : (
+                            // Real stage, but nothing has finished a pass through
+                            // it yet — so there is no average, only cases waiting.
+                            <span className="text-ink-faint">none finished yet</span>
+                          )}
+                        </span>
                         <ChevronRight
                           className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? "rotate-90 text-brand" : "text-ink-faint group-hover:translate-x-0.5 group-hover:text-brand"}`}
                         />
