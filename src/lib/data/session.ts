@@ -14,6 +14,8 @@ export interface SessionContext {
   roles: Role[];
   /** Flattened set of permission keys this user holds in the active tenant. */
   permissions: Set<string>;
+  /** Operates EDOSPMIS itself, across every tenant — not a tenant permission. */
+  isPlatformAdmin: boolean;
 }
 
 /**
@@ -61,7 +63,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
       : tenants[0]?.id) ?? null;
   if (!activeId) return null;
 
-  const [{ data: tenant }, { data: userRoles }] = await Promise.all([
+  const [{ data: tenant }, { data: userRoles }, { data: platformAdmin }] = await Promise.all([
     supabase.from("edospmis_tenants").select("*").eq("id", activeId).maybeSingle(),
     supabase
       .from("edospmis_user_roles")
@@ -69,6 +71,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
       .eq("user_id", authUser.id)
       .eq("tenant_id", activeId)
       .eq("scope_type", "tenant"),
+    supabase.rpc("edospmis_is_platform_admin"),
   ]);
   if (!tenant) return null;
 
@@ -98,6 +101,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     tenants,
     roles,
     permissions,
+    isPlatformAdmin: platformAdmin === true,
   };
 });
 

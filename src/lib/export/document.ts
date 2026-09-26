@@ -35,6 +35,10 @@ export interface DocumentSignature {
 
 export interface DocumentExport {
   tenantName: string;
+  tenantAddress?: string | null;
+  tenantPhone?: string | null;
+  tenantEmail?: string | null;
+  tenantRegistrationNumber?: string | null;
   docType: string;
   docNumber: string;
   statusLabel?: string;
@@ -92,7 +96,17 @@ export function documentPdf(d: DocumentExport): Uint8Array {
   doc.setFontSize(16);
   doc.setTextColor(...INK);
   doc.text(latin(d.docType.toUpperCase()), pageW - margin, y, { align: "right" });
-  y += 18;
+
+  const brandingLine = [d.tenantAddress, d.tenantPhone, d.tenantEmail, d.tenantRegistrationNumber]
+    .filter((v): v is string => Boolean(v))
+    .join("  ·  ");
+  if (brandingLine) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...FAINT);
+    doc.text(latin(brandingLine), margin, y + 13);
+  }
+  y += brandingLine ? 23 : 18;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);

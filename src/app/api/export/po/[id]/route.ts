@@ -29,6 +29,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const doc: DocumentExport = {
     tenantName: session.tenant.name,
+    tenantAddress: session.tenant.branding.address,
+    tenantPhone: session.tenant.branding.phone,
+    tenantEmail: session.tenant.branding.email,
+    tenantRegistrationNumber: session.tenant.branding.registration_number,
     docType: "Purchase Order",
     docNumber: record.po_number,
     statusLabel: record.status.replace(/_/g, " "),

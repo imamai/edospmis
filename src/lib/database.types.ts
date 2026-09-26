@@ -2,13 +2,21 @@ export type TenantStatus = "trial" | "active" | "suspended";
 export type MembershipStatus = "invited" | "active" | "suspended";
 export type RoleScopeType = "tenant" | "business_unit" | "branch" | "department";
 
+export interface TenantBranding {
+  logo_url?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  registration_number?: string | null;
+}
+
 export interface Tenant {
   id: string;
   name: string;
   slug: string;
   status: TenantStatus;
   plan: string;
-  branding: Record<string, unknown>;
+  branding: TenantBranding;
   numbering_format: string;
   case_sequence: number;
   requires_po_approval: boolean;
@@ -130,6 +138,54 @@ export interface Category {
   tenant_id: string;
   name: string;
   is_active: boolean;
+  created_at: string;
+}
+
+export interface BusinessUnit {
+  id: string;
+  tenant_id: string;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Branch {
+  id: string;
+  tenant_id: string;
+  business_unit_id: string | null;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Department {
+  id: string;
+  tenant_id: string;
+  branch_id: string | null;
+  business_unit_id: string | null;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Team {
+  id: string;
+  tenant_id: string;
+  department_id: string | null;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Queue {
+  id: string;
+  tenant_id: string;
+  name: string;
+  stage_key: string;
+  assignment_strategy: string;
   created_at: string;
 }
 

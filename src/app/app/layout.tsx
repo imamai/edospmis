@@ -10,9 +10,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <ServiceWorkerRegister />
-      <SidebarNav tenantName={session.tenant.name} permissions={permissions} />
+      <SidebarNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <MobileNav tenantName={session.tenant.name} permissions={permissions} />
+        <MobileNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>

@@ -30,6 +30,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const doc: DocumentExport = {
     tenantName: session.tenant.name,
+    tenantAddress: session.tenant.branding.address,
+    tenantPhone: session.tenant.branding.phone,
+    tenantEmail: session.tenant.branding.email,
+    tenantRegistrationNumber: session.tenant.branding.registration_number,
     docType: "Invoice",
     docNumber: record.invoice_number,
     statusLabel: record.status.replace(/_/g, " "),

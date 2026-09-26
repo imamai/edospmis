@@ -29,6 +29,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const doc: DocumentExport = {
     tenantName: session.tenant.name,
+    tenantAddress: session.tenant.branding.address,
+    tenantPhone: session.tenant.branding.phone,
+    tenantEmail: session.tenant.branding.email,
+    tenantRegistrationNumber: session.tenant.branding.registration_number,
     docType: contract.contract_type.replace(/_/g, " "),
     docNumber: contract.title,
     statusLabel: contract.status,

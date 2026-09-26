@@ -4,7 +4,7 @@ import { useId } from "react";
 import { cn } from "@/lib/utils";
 
 const CONTROL =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 text-[0.9375rem] text-ink " +
+  "w-full rounded-lg border border-line-strong bg-surface px-3 text-base sm:text-[0.9375rem] text-ink " +
   "placeholder:text-ink-faint focus:border-brand focus:outline-none " +
   "disabled:bg-surface-sunk disabled:text-ink-faint";
 
