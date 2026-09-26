@@ -156,6 +156,37 @@ export async function suggestPRFromText(_prev: SuggestState, form: FormData): Pr
   }
 }
 
+export async function updatePR(_prev: PRFormState, form: FormData): Promise<PRFormState> {
+  await requireSession();
+
+  const prId = String(form.get("pr_id") ?? "");
+  const caseId = String(form.get("case_id") ?? "");
+  const title = String(form.get("title") ?? "").trim();
+  const justification = String(form.get("justification") ?? "").trim() || null;
+  const categoryId = String(form.get("category_id") ?? "") || null;
+  const clientId = String(form.get("client_id") ?? "") || null;
+  const requiredBy = String(form.get("required_by") ?? "") || null;
+  const priority = String(form.get("priority") ?? "normal");
+  const items = parseItems(form);
+  if (!title) return { error: "Give the request a title.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_update_pr", {
+    p_pr_id: prId,
+    p_title: title,
+    p_justification: justification,
+    p_category_id: categoryId,
+    p_client_id: clientId,
+    p_required_by: requiredBy,
+    p_priority: priority,
+    p_items: items,
+  });
+  if (error) return { error: error.message, ok: null };
+
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: "Changes saved." };
+}
+
 export async function submitPR(caseId: string, prId: string): Promise<PRFormState> {
   await requireSession();
   const supabase = await createClient();

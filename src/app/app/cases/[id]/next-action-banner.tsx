@@ -22,6 +22,8 @@ const TONE_ICON: Record<Tone, typeof Info> = {
 export interface NextActionInput {
   session: SessionContext;
   canDecide: boolean;
+  canSubmit: boolean;
+  caseStatus: string;
   pendingApprovalRoleName: string | null;
   pendingApprovalDueAt: string | null;
   procurementDetail: ProcurementDetail | null;
@@ -30,7 +32,11 @@ export interface NextActionInput {
 }
 
 function computeNextAction(input: NextActionInput): { message: string; tone: Tone } | null {
-  const { session, canDecide, pendingApprovalRoleName, pendingApprovalDueAt, procurementDetail, fulfilmentDetail, financeDetail } = input;
+  const { session, canDecide, canSubmit, caseStatus, pendingApprovalRoleName, pendingApprovalDueAt, procurementDetail, fulfilmentDetail, financeDetail } = input;
+
+  if (canSubmit && caseStatus === "returned") {
+    return { message: "This request was returned for correction — edit it and submit again", tone: "attention" };
+  }
 
   if (canDecide && pendingApprovalRoleName) {
     const sla = pendingApprovalDueAt ? slaStatus(pendingApprovalDueAt) : null;

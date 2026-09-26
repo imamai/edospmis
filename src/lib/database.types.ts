@@ -4,6 +4,11 @@ export type RoleScopeType = "tenant" | "business_unit" | "branch" | "department"
 
 export interface TenantBranding {
   logo_url?: string | null;
+  /** A hex color tinting buttons/links (--color-brand) for this tenant. The
+   * dark sidebar shell stays the fixed navy identity — re-deriving a whole
+   * readable dark palette from an arbitrary picked hex is a bigger design
+   * problem than one accent color is meant to solve. */
+  accent_color?: string | null;
   address?: string | null;
   phone?: string | null;
   email?: string | null;

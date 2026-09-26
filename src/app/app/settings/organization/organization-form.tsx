@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateOrganization, type OrganizationFormState } from "./actions";
+import { LogoUpload } from "./logo-upload";
 import { Button } from "@/components/ui/button";
 import { TextInput, TextArea, CheckboxRow } from "@/components/ui/field";
 import type { Tenant } from "@/lib/database.types";
@@ -10,6 +11,7 @@ const initial: OrganizationFormState = { error: null, ok: null };
 
 export function OrganizationForm({ tenant }: { tenant: Tenant }) {
   const [state, action, pending] = useActionState(updateOrganization, initial);
+  const [accentColor, setAccentColor] = useState(tenant.branding.accent_color ?? "#1d3557");
 
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -36,8 +38,27 @@ export function OrganizationForm({ tenant }: { tenant: Tenant }) {
         <p className="mt-0.5 text-xs text-ink-faint">Printed on generated POs, invoices and contracts.</p>
       </div>
 
+      <LogoUpload tenantId={tenant.id} currentUrl={tenant.branding.logo_url ?? null} />
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="accent_color" className="text-sm font-medium text-ink">
+          Accent color
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            id="accent_color"
+            type="color"
+            name="accent_color"
+            value={accentColor}
+            onChange={(e) => setAccentColor(e.target.value)}
+            className="h-9 w-14 cursor-pointer rounded-md border border-line bg-surface p-1"
+          />
+          <span className="tnum text-sm text-ink-faint">{accentColor}</span>
+        </div>
+        <p className="text-xs text-ink-faint">Tints buttons and links across the app. The sidebar stays EDOSPMIS's navy.</p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label="Logo URL" name="logo_url" defaultValue={tenant.branding.logo_url ?? ""} placeholder="https://…" />
         <TextInput label="Registration number" name="registration_number" defaultValue={tenant.branding.registration_number ?? ""} />
         <TextInput label="Phone" name="phone" defaultValue={tenant.branding.phone ?? ""} />
         <TextInput label="Email" name="email" type="email" defaultValue={tenant.branding.email ?? ""} />

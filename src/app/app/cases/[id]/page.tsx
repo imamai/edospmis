@@ -9,8 +9,10 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkflowStepper } from "@/components/app/workflow-stepper";
 import { formatDate, formatMoney, slaStatus } from "@/lib/utils";
+import { getCategories, getClients } from "@/lib/data/reference";
 import { ApprovalPanel } from "./approval-panel";
 import { SubmitButton } from "./submit-button";
+import { EditPrButton } from "./edit-pr-button";
 import { StartProcurementButton } from "./start-procurement-button";
 import { ProcurementPanel } from "./procurement-panel";
 import { ReceivingPanel } from "./receiving-panel";
@@ -38,6 +40,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const canDecide = !!pendingApproval && myRoleIds.has(pendingApproval.role_id);
   const canSubmit = pr.status === "draft" && pr.requester_id === session.user.id;
   const sla = pendingApproval ? slaStatus(pendingTaskDueAt) : null;
+
+  const [editCategories, editClients] = canSubmit
+    ? await Promise.all([getCategories(session.tenant.id), getClients(session.tenant.id)])
+    : [[], []];
 
   const showStartProcurement = c.status === "approved" && can(session, "procurement.rfq.create");
   const pastProcurement = ["procurement", "po_approval", "awarded", "receiving", "finance", "delivery", "closed"].includes(c.status);
@@ -82,6 +88,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canSubmit && <EditPrButton caseId={c.id} pr={pr} categories={editCategories} clients={editClients} />}
           {canSubmit && <SubmitButton caseId={c.id} prId={pr.id} />}
           {showStartProcurement && <StartProcurementButton caseId={c.id} />}
           {canClose && (
@@ -103,6 +110,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       <NextActionBanner
         session={session}
         canDecide={canDecide}
+        canSubmit={canSubmit}
+        caseStatus={c.status}
         pendingApprovalRoleName={pendingApproval?.role_name ?? null}
         pendingApprovalDueAt={pendingTaskDueAt}
         procurementDetail={procurementDetail}

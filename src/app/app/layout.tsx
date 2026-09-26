@@ -24,11 +24,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     };
   }
 
+  // A tenant's accent color tints buttons/links (--color-brand) in the
+  // content area only — the sidebar keeps its fixed navy shell, so this
+  // never touches EDOSPMIS's own brand identity, only what a tenant sees
+  // once inside their workspace.
+  const accent = session.tenant.branding.accent_color;
+
   return (
     <div className="flex min-h-screen">
       <ServiceWorkerRegister />
       <SidebarNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} counts={counts} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" style={accent ? ({ "--color-brand": accent } as React.CSSProperties) : undefined}>
         <MobileNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} counts={counts} />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
