@@ -119,6 +119,7 @@ export async function getPurchaseOrderReport(tenantId: string, period?: ReportPe
 
 export interface GoodsReceivedReportRow {
   grn_id: string;
+  po_id: string;
   case_id: string;
   case_number: string;
   department_name: string | null;
@@ -132,7 +133,7 @@ export async function getGoodsReceivedReport(tenantId: string, period?: ReportPe
   const supabase = await createClient();
   let query = supabase
     .from("edospmis_grns")
-    .select("id, case_id, grn_number, status, received_at, edospmis_purchase_orders(po_number)")
+    .select("id, po_id, case_id, grn_number, status, received_at, edospmis_purchase_orders(po_number)")
     .eq("tenant_id", tenantId);
   if (period?.from) query = query.gte("received_at", period.from);
   if (period?.to) query = query.lte("received_at", period.to);
@@ -145,6 +146,7 @@ export async function getGoodsReceivedReport(tenantId: string, period?: ReportPe
     const po = g.edospmis_purchase_orders as unknown as { po_number: string } | null;
     return {
       grn_id: g.id,
+      po_id: g.po_id,
       case_id: g.case_id,
       case_number: c?.case_number ?? "",
       department_name: c?.department_name ?? null,
@@ -162,6 +164,7 @@ export interface InvoiceReportRow {
   case_number: string;
   department_name: string | null;
   invoice_number: string;
+  supplier_id: string | null;
   supplier_name: string;
   total_cents: number;
   currency: string;
@@ -174,7 +177,7 @@ export async function getInvoiceReport(tenantId: string, period?: ReportPeriod):
   const supabase = await createClient();
   let query = supabase
     .from("edospmis_invoices")
-    .select("id, case_id, invoice_number, total_cents, currency, status, due_date, submitted_at, edospmis_suppliers(name)")
+    .select("id, case_id, invoice_number, supplier_id, total_cents, currency, status, due_date, submitted_at, edospmis_suppliers(name)")
     .eq("tenant_id", tenantId);
   if (period?.from) query = query.gte("submitted_at", period.from);
   if (period?.to) query = query.lte("submitted_at", period.to);
@@ -191,6 +194,7 @@ export async function getInvoiceReport(tenantId: string, period?: ReportPeriod):
       case_number: c?.case_number ?? "",
       department_name: c?.department_name ?? null,
       invoice_number: i.invoice_number,
+      supplier_id: (i.supplier_id as string | null) ?? null,
       supplier_name: supplier?.name ?? "",
       total_cents: i.total_cents,
       currency: i.currency,

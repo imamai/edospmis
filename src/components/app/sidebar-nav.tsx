@@ -30,19 +30,16 @@ import { signOut } from "@/app/app/actions";
  */
 function NavLink({
   item,
-  pathname,
+  activeHref,
   count,
   onNavigate,
 }: {
   item: NavItem;
-  pathname: string;
+  activeHref: string | null;
   count?: number;
   onNavigate?: () => void;
 }) {
-  // A deep link like "/app/requisitions?stage=awarded" should still light up
-  // as active while on /app/requisitions — compare on the path only.
-  const itemPath = item.href.split("?")[0];
-  const active = pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+  const active = item.href.split("?")[0] === activeHref;
   const Icon = item.icon;
 
   return (
@@ -80,13 +77,13 @@ function NavLink({
 function NavBody({
   tenantName,
   groups,
-  pathname,
+  activeHref,
   counts,
   onNavigate,
 }: {
   tenantName: string;
   groups: typeof NAV_GROUPS;
-  pathname: string;
+  activeHref: string | null;
   counts: Record<string, number>;
   onNavigate?: () => void;
 }) {
@@ -108,7 +105,7 @@ function NavBody({
               <NavLink
                 key={item.href}
                 item={item}
-                pathname={pathname}
+                activeHref={activeHref}
                 count={item.countKey ? counts[item.countKey] : undefined}
                 onNavigate={onNavigate}
               />
@@ -117,7 +114,7 @@ function NavBody({
         ))}
         <div className="flex flex-col gap-0.5 border-t border-white/10 pt-3">
           {NAV_BOTTOM_ITEMS.map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            <NavLink key={item.href} item={item} activeHref={activeHref} onNavigate={onNavigate} />
           ))}
         </div>
       </nav>
@@ -183,6 +180,17 @@ export function SidebarNav({
     .map((g) => ({ ...g, items: g.items.filter((i) => !i.requires || granted.has(i.requires)) }))
     .filter((g) => g.items.length > 0);
 
+  // The longest href that matches the current path wins. Testing each row
+  // against its own prefix lit up a parent and its child at the same time —
+  // on /app/reports/goods-received both "Goods received" and "Reports" read
+  // as the page you are on. A deep link like
+  // "/app/requisitions?stage=awarded" still matches on its path alone.
+  const activeHref =
+    [...groups.flatMap((g) => g.items), ...NAV_BOTTOM_ITEMS]
+      .map((i) => i.href.split("?")[0])
+      .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+      .sort((a, b) => b.length - a.length)[0] ?? null;
+
   return (
     <>
       {/* Phone: a compact bar holding the menu button, since there is no room
@@ -218,7 +226,7 @@ export function SidebarNav({
             <NavBody
               tenantName={tenantName}
               groups={groups}
-              pathname={pathname}
+              activeHref={activeHref}
               counts={counts}
               onNavigate={() => setOpen(false)}
             />
@@ -227,7 +235,7 @@ export function SidebarNav({
       )}
 
       <aside className="hidden w-64 shrink-0 flex-col bg-brand-darker text-brand-soft md:flex">
-        <NavBody tenantName={tenantName} groups={groups} pathname={pathname} counts={counts} />
+        <NavBody tenantName={tenantName} groups={groups} activeHref={activeHref} counts={counts} />
       </aside>
     </>
   );

@@ -17,6 +17,10 @@ export interface ReportFilterFlags {
   priority?: boolean;
   stage?: boolean;
   dept?: boolean;
+  /** Narrow to one supplier. Only on reports whose rows have one — an RFQ
+   * goes to several, and a goods receipt carries the PO's supplier rather
+   * than its own. */
+  supplier?: boolean;
   /** The placeholder for the search box — what you can actually type into it. */
   searchHint?: string;
 }
@@ -28,9 +32,9 @@ export const REPORT_FILTERS: Record<string, ReportFilterFlags> = {
   "supplier-performance": { dates: true, search: true, searchHint: "Supplier name" },
   "spend-by-category": { dates: true, search: true, searchHint: "Category name" },
   rfqs: { dates: true, search: true, status: true, dept: true, searchHint: "PR number or RFQ title" },
-  "purchase-orders": { dates: true, search: true, status: true, dept: true, searchHint: "PO number, PR number or supplier" },
+  "purchase-orders": { dates: true, search: true, status: true, dept: true, supplier: true, searchHint: "PO number, PR number or supplier" },
   "goods-received": { dates: true, search: true, status: true, dept: true, searchHint: "GRN number, PO number or PR number" },
-  invoices: { dates: true, search: true, status: true, dept: true, searchHint: "Invoice number, PR number or supplier" },
+  invoices: { dates: true, search: true, status: true, dept: true, supplier: true, searchHint: "Invoice number, PR number or supplier" },
 };
 
 export const PERIOD_OPTIONS: { value: PeriodKey; label: string }[] = [

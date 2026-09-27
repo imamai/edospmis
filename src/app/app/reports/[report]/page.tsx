@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics, getStageCases } from "@/lib/data/analytics";
 import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
+import { getSuppliers } from "@/lib/data/procurement";
 import { resolvePeriod } from "@/lib/report-period";
 import { REPORT_FILTERS } from "@/lib/report-filters";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -54,6 +55,7 @@ export default async function ReportDetailPage({
     priority?: string;
     stage?: string;
     dept?: string;
+    supplier?: string;
     drillStage?: string;
   }>;
 }) {
@@ -81,6 +83,7 @@ export default async function ReportDetailPage({
   const priorityFilter = sp.priority ?? "";
   const stageFilter = sp.stage ?? "";
   const deptFilter = (sp.dept ?? "").trim();
+  const supplierFilter = (sp.supplier ?? "").trim();
   const drillStage = key === "stage-durations" ? (sp.drillStage ?? "") : "";
   const drillCases = drillStage ? await getStageCases(session.tenant.id, drillStage, { from: period.from, to: period.to }) : [];
 
@@ -113,7 +116,8 @@ export default async function ReportDetailPage({
     (r) =>
       (!q || r.po_number.toLowerCase().includes(q) || r.case_number.toLowerCase().includes(q) || r.supplier_name.toLowerCase().includes(q)) &&
       (!statusFilter || r.status === statusFilter) &&
-      (!deptFilter || r.department_name === deptFilter),
+      (!deptFilter || r.department_name === deptFilter) &&
+      (!supplierFilter || r.supplier_id === supplierFilter),
   );
   const filteredGrns = grnRows.filter(
     (r) =>
@@ -125,7 +129,8 @@ export default async function ReportDetailPage({
     (r) =>
       (!q || r.invoice_number.toLowerCase().includes(q) || r.case_number.toLowerCase().includes(q) || r.supplier_name.toLowerCase().includes(q)) &&
       (!statusFilter || r.status === statusFilter) &&
-      (!deptFilter || r.department_name === deptFilter),
+      (!deptFilter || r.department_name === deptFilter) &&
+      (!supplierFilter || r.supplier_id === supplierFilter),
   );
 
   const procurementReportRows: { status: string; department_name: string | null }[] = isProcurementReportKey(key)
@@ -145,6 +150,7 @@ export default async function ReportDetailPage({
   const all_stages = Array.from(new Set([...data.stageDurations.map((s) => s.stage_key), ...data.slaCompliance.map((s) => s.stage_key)]));
 
   const flags = REPORT_FILTERS[key] ?? { dates: true };
+  const suppliers = flags.supplier ? await getSuppliers(session.tenant.id, true) : [];
 
   function hrefWithDrill(stageKey: string | null): string {
     const params = new URLSearchParams();
@@ -194,6 +200,7 @@ export default async function ReportDetailPage({
           priority: priorityFilter,
           stage: stageFilter,
           dept: deptFilter,
+          supplier: supplierFilter,
         }}
         options={{
           statuses: isProcurementReportKey(key)
@@ -202,6 +209,7 @@ export default async function ReportDetailPage({
           priorities: aging_priorities,
           stages: all_stages.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
           departments: procurementDepartments,
+          suppliers: suppliers.map((s) => ({ id: s.id, name: s.name })),
         }}
         canExport={canExport}
         periodLabel={period.label}
@@ -594,8 +602,29 @@ export default async function ReportDetailPage({
                 <tbody>
                   {filteredGrns.map((r) => (
                     <tr key={r.grn_id} className="border-b border-line last:border-0">
-                      <td className="py-2 pr-4 font-mono text-xs text-ink">{r.grn_number}</td>
-                      <td className="py-2 pr-4 font-mono text-xs text-ink-soft">{r.po_number}</td>
+                      <td className="py-2 pr-4">
+                        {/* Same pattern as the purchase-order report: the
+                            number opens the document itself, to read, print
+                            or save. */}
+                        <PdfLinkButton
+                          href={`/api/export/grn/${r.grn_id}`}
+                          title={`Goods received note ${r.grn_number}`}
+                          filename={r.grn_number}
+                          className="font-mono text-xs text-brand hover:underline"
+                        >
+                          {r.grn_number}
+                        </PdfLinkButton>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <PdfLinkButton
+                          href={`/api/export/po/${r.po_id}`}
+                          title={`Purchase order ${r.po_number}`}
+                          filename={r.po_number}
+                          className="font-mono text-xs text-ink-soft hover:text-brand hover:underline"
+                        >
+                          {r.po_number}
+                        </PdfLinkButton>
+                      </td>
                       <td className="py-2 pr-4 tnum">
                         <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
                           {r.case_number}

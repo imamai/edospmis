@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Plus, Trash2, Receipt } from "lucide-react";
@@ -279,10 +281,21 @@ export function FinancePanel({
               </div>
             )}
 
+            {invoice.status === "approved" && (
+              <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
+                Approved and awaiting payment. The case can move on from Finance without paying now — this invoice stays
+                payable and appears under{" "}
+                <Link href="/app/reports/invoices?status=approved" className="font-medium text-brand hover:underline">
+                  Invoices &amp; payments
+                </Link>
+                , where it can be settled on its own or together with this supplier&rsquo;s other approved invoices.
+              </p>
+            )}
+
             {invoice.status === "approved" && canRecordPayment && (
               <>
                 <Button size="sm" variant="secondary" onClick={() => setPaying(true)}>
-                  Record payment
+                  Record payment now
                 </Button>
                 <Modal open={paying} onClose={() => setPaying(false)} title="Record payment" dismissible={!payPending} size="sm">
                   <form onSubmit={payForm} className="flex flex-col gap-3">

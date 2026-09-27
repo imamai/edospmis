@@ -58,6 +58,15 @@ function computeNextAction(input: NextActionInput): { message: string; tone: Ton
     if (invoice.status === "matched") {
       return { message: `Invoice ${invoice.invoice_number} is matched and ready to approve`, tone: "info" };
     }
+    // Approved but unpaid is a normal resting state, not something stuck:
+    // payment is often run in a batch later rather than case by case. Say what
+    // is true without implying the case cannot move on.
+    if (invoice.status === "approved") {
+      return {
+        message: `Invoice ${invoice.invoice_number} is approved and awaiting payment — the case can move on meanwhile`,
+        tone: "info",
+      };
+    }
   }
 
   const po = procurementDetail?.po;

@@ -23,6 +23,7 @@ export interface FilterOptions {
   priorities: string[];
   stages: { value: string; label: string }[];
   departments: string[];
+  suppliers: { id: string; name: string }[];
 }
 
 export interface FilterState {
@@ -34,6 +35,7 @@ export interface FilterState {
   priority: string;
   stage: string;
   dept: string;
+  supplier: string;
 }
 
 export function ReportFilterForm({
@@ -73,6 +75,7 @@ export function ReportFilterForm({
     if (flags.priority && values.priority) p.set("priority", values.priority);
     if (flags.stage && values.stage) p.set("stage", values.stage);
     if (flags.dept && values.dept) p.set("dept", values.dept);
+    if (flags.supplier && values.supplier) p.set("supplier", values.supplier);
     return p.toString();
   };
 
@@ -104,7 +107,7 @@ export function ReportFilterForm({
               <button
                 type="button"
                 onClick={() => {
-                  setValues({ period: "all", from: "", to: "", q: "", status: "", priority: "", stage: "", dept: "" });
+                  setValues({ period: "all", from: "", to: "", q: "", status: "", priority: "", stage: "", dept: "", supplier: "" });
                   router.push(`/app/reports/${reportKey}`);
                 }}
                 className="px-1 text-sm font-semibold text-ink-faint hover:text-ink"
@@ -213,6 +216,19 @@ export function ReportFilterForm({
                 {options.stages.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
+
+          {flags.supplier && (
+            <FilterField label="Supplier" htmlFor="supplier">
+              <select id="supplier" value={values.supplier} onChange={(e) => set("supplier", e.target.value)} className={filterControl}>
+                <option value="">All suppliers</option>
+                {options.suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
                   </option>
                 ))}
               </select>

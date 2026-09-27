@@ -34,6 +34,13 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
   const [pending, startTransition] = useTransition();
 
   const payableRows = useMemo(() => rows.filter((r) => PAYABLE_STATUSES.has(r.status)), [rows]);
+  const payableTotal = payableRows.reduce((sum, r) => sum + r.total_cents, 0);
+  const paidTotal = rows.filter((r) => r.status === "paid").reduce((sum, r) => sum + r.total_cents, 0);
+
+  // When every row belongs to one supplier the report has been narrowed to
+  // them, and the summary can say whose money this is.
+  const supplierNames = new Set(rows.map((r) => r.supplier_name).filter(Boolean));
+  const singleSupplier = supplierNames.size === 1 ? [...supplierNames][0] : null;
   const selectedRows = rows.filter((r) => selected.has(r.invoice_id));
   const selectedTotal = selectedRows.reduce((sum, r) => sum + r.total_cents, 0);
   const allPayableSelected = payableRows.length > 0 && payableRows.every((r) => selected.has(r.invoice_id));
@@ -73,6 +80,27 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
 
   return (
     <div className="flex flex-col gap-3">
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-sm">
+          <span className="font-medium text-ink">
+            {singleSupplier ? singleSupplier : `${supplierNames.size} suppliers`}
+          </span>
+          <span className="text-ink-soft">
+            Awaiting payment:{" "}
+            <span className="tnum font-semibold text-ink">{formatMoney(payableTotal)}</span>
+            <span className="text-ink-faint"> ({payableRows.length})</span>
+          </span>
+          <span className="text-ink-soft">
+            Already paid: <span className="tnum font-medium text-ink-soft">{formatMoney(paidTotal)}</span>
+          </span>
+          {canPay && payableRows.length > 0 && selected.size === 0 && (
+            <button type="button" onClick={toggleAll} className="ml-auto text-xs font-semibold text-brand hover:underline">
+              Select all {payableRows.length} payable
+            </button>
+          )}
+        </div>
+      )}
+
       {canPay && selected.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-soft px-3 py-2.5">
           <p className="text-sm font-medium text-brand">
@@ -117,8 +145,23 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
                 <tr key={r.invoice_id} className="border-b border-line last:border-0">
                   {canPay && (
                     <td className="py-2 pr-2">
-                      {payable && (
+                      {payable ? (
                         <input type="checkbox" checked={selected.has(r.invoice_id)} onChange={() => toggle(r.invoice_id)} aria-label={`Select ${r.invoice_number}`} />
+                      ) : (
+                        <span
+                          className="block text-center text-xs text-ink-faint"
+                          title={
+                            r.status === "paid"
+                              ? "Already paid"
+                              : r.status === "exception"
+                                ? "Has an unresolved match exception"
+                                : r.status === "void"
+                                  ? "Voided"
+                                  : "Not approved for payment yet"
+                          }
+                        >
+                          &mdash;
+                        </span>
                       )}
                     </td>
                   )}
