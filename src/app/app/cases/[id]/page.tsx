@@ -248,7 +248,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         <ReceivingPanel
           caseId={c.id}
           poItems={procurementDetail!.po!.items}
+          poNumber={procurementDetail!.po!.po_number}
           detail={fulfilmentDetail}
+          caseStatus={c.status}
           canRecord={can(session, "receiving.grn.create")}
           canInspect={can(session, "receiving.grn.approve")}
           emphasize={isCurrentStage(PANEL_STAGE_KEYS.receiving, c.current_stage_key)}

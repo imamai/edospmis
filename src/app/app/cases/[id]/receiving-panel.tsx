@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
+import { STAGE_LABEL } from "@/lib/stage-labels";
 import { formatDate } from "@/lib/utils";
 import type { FulfilmentDetail } from "@/lib/data/fulfilment";
 import type { PRItem } from "@/lib/database.types";
@@ -32,14 +33,18 @@ interface ItemRow {
 export function ReceivingPanel({
   caseId,
   poItems,
+  poNumber,
   detail,
+  caseStatus,
   canRecord,
   canInspect,
   emphasize,
 }: {
   caseId: string;
   poItems: PRItem[];
+  poNumber: string;
   detail: FulfilmentDetail;
+  caseStatus: string;
   canRecord: boolean;
   canInspect: boolean;
   emphasize?: boolean;
@@ -86,6 +91,13 @@ export function ReceivingPanel({
   }
 
   const inspectingGrnRow = detail.grns.find((g) => g.id === inspectingGrn);
+
+  // What is still outstanding on the order, and whether this stage is still
+  // the one in play.
+  const orderedTotal = poItems.reduce((sum, i) => sum + i.qty, 0);
+  const receivedTotal = detail.grns.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0), 0);
+  const fullyReceived = receivedTotal >= orderedTotal;
+  const receivingOpen = (caseStatus === "awarded" || caseStatus === "receiving") && !fullyReceived;
 
   return (
     <Card raised={emphasize}>
@@ -164,10 +176,23 @@ export function ReceivingPanel({
           </form>
         </Modal>
 
-        {canRecord && (
+        {/* Nothing left to receive, or the case has moved past Receiving —
+            edospmis_record_grn refuses both ("This case has no awarded
+            purchase order to receive against"), so the button is not offered
+            where it would only fail. It used to sit there on a fully received
+            order as though a second delivery were still expected. */}
+        {canRecord && !receivingOpen && (
+          <p className="text-sm text-ink-faint">
+            {fullyReceived
+              ? `Everything on ${poNumber} has been received.`
+              : `Receiving is closed for this case — it has moved on to ${STAGE_LABEL[caseStatus] ?? caseStatus}.`}
+          </p>
+        )}
+
+        {canRecord && receivingOpen && (
           <>
             <Button size="sm" variant="secondary" onClick={() => setRecording(true)}>
-              Record goods received
+              {detail.grns.length === 0 ? "Record goods received" : "Record another delivery"}
             </Button>
             <Modal open={recording} onClose={() => setRecording(false)} title="Record goods received" dismissible={!grnPending} size="lg">
               <form onSubmit={submitGrn} className="flex flex-col gap-3">
