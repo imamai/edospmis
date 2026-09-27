@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { documentError } from "@/lib/export/document";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { tableResponse, formatOf, type Cell } from "@/lib/export/table";
@@ -12,7 +12,7 @@ import { tableResponse, formatOf, type Cell } from "@/lib/export/table";
 export async function GET(req: Request) {
   const session = await requireSession();
   if (!can(session, "reports.export")) {
-    return NextResponse.json({ error: "You don't have permission to export reports." }, { status: 403 });
+    return documentError("You don't have permission to export reports.", 403);
   }
 
   const supabase = await createClient();

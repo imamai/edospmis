@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Copy, Mail, Check, AlertTriangle, ShoppingCart } from "lucide-react";
+import { FileText, Copy, Mail, Check, AlertTriangle, ShoppingCart } from "lucide-react";
 import {
   inviteSupplierToRfq,
   inviteProspectToRfq,
@@ -162,11 +162,11 @@ export function ProcurementPanel({
               {emphasize && <Badge tone="brand">Current stage</Badge>}
               <PdfLinkButton
                 href={`/api/export/po/${po.id}`}
-                title={`Purchase order ${po.po_number}`}
                 filename={po.po_number}
+                title={`Purchase order ${po.po_number}`}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
               >
-                <Download className="h-3.5 w-3.5" />
+                <FileText className="h-3.5 w-3.5" />
                 PDF
               </PdfLinkButton>
             </div>

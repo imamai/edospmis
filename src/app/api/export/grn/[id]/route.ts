@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
-import { documentResponse, fetchLogoDataUrl, type DocumentExport } from "@/lib/export/document";
+import { documentResponse, fetchLogoDataUrl, type DocumentExport, documentError } from "@/lib/export/document";
 import { formatDate } from "@/lib/utils";
 import type { Grn, GrnItem, Inspection } from "@/lib/database.types";
 
@@ -21,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await requireSession();
   if (!can(session, "receiving.grn.view")) {
-    return NextResponse.json({ error: "You don't have permission to view goods received notes." }, { status: 403 });
+    return documentError("You don't have permission to view goods received notes.", 403);
   }
 
   const supabase = await createClient();
@@ -31,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .eq("id", id)
     .eq("tenant_id", session.tenant.id)
     .maybeSingle();
-  if (!grn) return NextResponse.json({ error: "Goods received note not found." }, { status: 404 });
+  if (!grn) return documentError("Goods received note not found.", 404);
 
   const record = grn as unknown as Grn & {
     edospmis_purchase_orders: { po_number: string; currency: string; edospmis_suppliers: { name: string } | null } | null;

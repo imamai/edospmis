@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getPurchaseOrderReport } from "@/lib/data/procurement-reports";
 import { createClient } from "@/lib/supabase/server";
@@ -105,11 +105,11 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
                     <td className="py-2 text-right">
                       <PdfLinkButton
                         href={`/api/export/po/${p.po_id}`}
-                        title={`Purchase order ${p.po_number}`}
                         filename={p.po_number}
+                        title={`Purchase order ${p.po_number}`}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint hover:text-brand"
                       >
-                        <Download className="h-3.5 w-3.5" />
+                        <FileText className="h-3.5 w-3.5" />
                         PDF
                       </PdfLinkButton>
                     </td>

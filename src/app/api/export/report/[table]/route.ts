@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { documentError } from "@/lib/export/document";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics } from "@/lib/data/analytics";
 import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
@@ -27,10 +27,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
   const { table } = await params;
   const session = await requireSession();
   if (!can(session, "reports.export")) {
-    return NextResponse.json({ error: "You don't have permission to export reports." }, { status: 403 });
+    return documentError("You don't have permission to export reports.", 403);
   }
   if (!isTableKey(table)) {
-    return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+    return documentError("Unknown report.", 404);
   }
 
   const url = new URL(req.url);

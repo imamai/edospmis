@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { FileText } from "lucide-react";
 import { bulkRecordPayments } from "@/app/app/finance/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,22 @@ const PAYABLE_STATUSES = new Set(["approved"]);
  * edospmis_record_payment RPC (via bulkRecordPayments), once per invoice —
  * no separate mutation logic, just a faster way to reach the existing one.
  */
-export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canPay: boolean }) {
+export function InvoicesTable({
+  rows,
+  canPay,
+  canViewDocument,
+}: {
+  rows: InvoiceReportRow[];
+  canPay: boolean;
+  canViewDocument: boolean;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [payOpen, setPayOpen] = useState(false);
   const [method, setMethod] = useState("");
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "good" | "attention"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const payableRows = useMemo(() => rows.filter((r) => PAYABLE_STATUSES.has(r.status)), [rows]);
@@ -64,12 +73,24 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
       return;
     }
     setError(null);
+    const count = selected.size;
     startTransition(async () => {
-      const result = await bulkRecordPayments([...selected], reference, method);
-      if (result.error) {
-        setError(result.error);
+      const { paid, failures } = await bulkRecordPayments([...selected], reference, method);
+      // Nothing went through — stay in the dialog so the method and reference
+      // that were just typed aren't lost on the way to a retry.
+      if (paid === 0) {
+        setError(failures[0] ?? "None of these could be paid.");
         return;
       }
+      const reasons = [...new Set(failures)].join(" ");
+      setNotice(
+        failures.length === 0
+          ? { tone: "good", text: `${paid} invoice${paid === 1 ? "" : "s"} marked paid.` }
+          : {
+              tone: "attention",
+              text: `${paid} of ${count} marked paid. ${failures.length} could not be: ${reasons}`,
+            },
+      );
       setPayOpen(false);
       setSelected(new Set());
       setMethod("");
@@ -80,6 +101,20 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
 
   return (
     <div className="flex flex-col gap-3">
+      {notice && (
+        <div
+          className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm ${
+            notice.tone === "good" ? "border-good/30 bg-good-soft text-good" : "border-attention/30 bg-attention-soft text-attention"
+          }`}
+          role="status"
+        >
+          <p>{notice.text}</p>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-xs font-semibold underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-sm">
           <span className="font-medium text-ink">
@@ -94,9 +129,15 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
             Already paid: <span className="tnum font-medium text-ink-soft">{formatMoney(paidTotal)}</span>
           </span>
           {canPay && payableRows.length > 0 && selected.size === 0 && (
-            <button type="button" onClick={toggleAll} className="ml-auto text-xs font-semibold text-brand hover:underline">
-              Select all {payableRows.length} payable
-            </button>
+            <>
+              {/* Answers "which of these can I choose?" on the screen, rather
+                  than only in a refusal after the fact: any approved invoice,
+                  one by one or all at once. */}
+              <span className="text-xs text-ink-faint">Tick any approved invoice — approval has to come first.</span>
+              <button type="button" onClick={toggleAll} className="ml-auto text-xs font-semibold text-brand hover:underline">
+                Select all {payableRows.length} payable
+              </button>
+            </>
           )}
         </div>
       )}
@@ -194,15 +235,17 @@ export function InvoicesTable({ rows, canPay }: { rows: InvoiceReportRow[]; canP
                   <td className="py-2 pr-4 text-ink-soft">{r.due_date ? formatDate(r.due_date) : "—"}</td>
                   <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.submitted_at)}</td>
                   <td className="py-2 text-right">
+                    {canViewDocument && (
                     <PdfLinkButton
                       href={`/api/export/invoice/${r.invoice_id}`}
-                      title={`Invoice ${r.invoice_number}`}
                       filename={r.invoice_number}
+                      title={`Invoice ${r.invoice_number}`}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint hover:text-brand"
                     >
-                      <Download className="h-3.5 w-3.5" />
+                      <FileText className="h-3.5 w-3.5" />
                       PDF
                     </PdfLinkButton>
+                    )}
                   </td>
                 </tr>
               );

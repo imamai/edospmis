@@ -13,7 +13,9 @@ export function ExportLinks({ base }: { base: string }) {
         Excel
       </Link>
       <span className="text-ink-faint">&middot;</span>
-      <Link href={`${base}${sep}format=pdf`} className="font-semibold text-ink-soft hover:text-brand">
+      {/* `download` because this row is the download row — the PDF itself is
+          served inline so that the Print link beside it can show it. */}
+      <Link href={`${base}${sep}format=pdf`} download className="font-semibold text-ink-soft hover:text-brand">
         PDF
       </Link>
     </div>

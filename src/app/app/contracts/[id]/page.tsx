@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { Download } from "lucide-react";
+import { FileText } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getContractDetail } from "@/lib/data/contracts";
 import { Badge } from "@/components/ui/badge";
-import { ButtonLink } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { formatDate } from "@/lib/utils";
 import { ContractPanel } from "./contract-panel";
 
@@ -32,10 +33,15 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
             </p>
             <h1 className="mt-0.5 text-xl font-semibold text-ink">{contract.title}</h1>
           </div>
-          <ButtonLink href={`/api/export/contract/${contract.id}`} variant="secondary" size="sm">
-            <Download className="h-4 w-4" />
-            Download PDF
-          </ButtonLink>
+          <PdfLinkButton
+            href={`/api/export/contract/${contract.id}`}
+            filename={contract.title}
+            title={contract.title}
+            className={buttonClass({ variant: "secondary", size: "sm" })}
+          >
+            <FileText className="h-4 w-4" />
+            Open PDF
+          </PdfLinkButton>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Badge tone={STATUS_TONE[contract.status]}>{contract.status}</Badge>

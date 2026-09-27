@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
 import { requireSession, can } from "@/lib/data/session";
 import { getContractDetail } from "@/lib/data/contracts";
-import { documentResponse, type DocumentExport } from "@/lib/export/document";
+import { documentResponse, type DocumentExport, documentError } from "@/lib/export/document";
 import { formatDate } from "@/lib/utils";
 
 const PARTY_ROLE_LABEL: Record<string, string> = {
@@ -15,11 +14,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await requireSession();
   if (!can(session, "legal.contract.view")) {
-    return NextResponse.json({ error: "You don't have permission to view contracts." }, { status: 403 });
+    return documentError("You don't have permission to view contracts.", 403);
   }
 
   const detail = await getContractDetail(session.tenant.id, id);
-  if (!detail) return NextResponse.json({ error: "Contract not found." }, { status: 404 });
+  if (!detail) return documentError("Contract not found.", 404);
   const { contract, parties, clientName } = detail;
 
   // Phase 3 deferred hashing to whenever this PDF was actually built — this

@@ -22,6 +22,15 @@ const SIZES: Record<Size, string> = {
 const BASE =
   "inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:cursor-not-allowed";
 
+/** For the few controls that can't be a Button or ButtonLink — PdfLinkButton renders its own element — but must look like one. */
+export function buttonClass({
+  variant = "primary",
+  size = "md",
+  className,
+}: { variant?: Variant; size?: Size; className?: string } = {}) {
+  return cn(BASE, VARIANTS[variant], SIZES[size], className);
+}
+
 export function Button({
   variant = "primary",
   size = "md",

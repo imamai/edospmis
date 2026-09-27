@@ -75,6 +75,28 @@ function file(body: Uint8Array, filename: string): Response {
 }
 
 /**
+ * What an export route answers with when it cannot produce the document.
+ *
+ * These URLs are opened by a browser — in the document viewer's frame, or
+ * pasted straight into a tab — and answering one with `{"error":"You don't
+ * have permission to view purchase orders."}` put raw JSON on screen where
+ * the document should have been. This is the same sentence, as something a
+ * person can read, and it keeps the status code for anything reading the
+ * response programmatically.
+ */
+export function documentError(message: string, status: number): Response {
+  const safe = message.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string);
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Document unavailable</title>` +
+      `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+      `<style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;` +
+      `background:#f4f6fa;color:#5b625d;font:400 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px;text-align:center}` +
+      `p{max-width:26rem;margin:0}</style></head><body><p>${safe}</p></body></html>`,
+    { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
+  );
+}
+
+/**
  * Fetches a tenant's logo (from `branding.logo_url`) and returns it as a
  * data: URL jsPDF's addImage can embed synchronously. jsPDF can't fetch a
  * bare URL itself, so this is the one async step a document export needs

@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus, Trash2, Receipt } from "lucide-react";
+import { FileText, Plus, Trash2, Receipt } from "lucide-react";
 import {
   submitInvoice,
   resolveMatchException,
@@ -222,11 +222,11 @@ export function FinancePanel({
                 <Badge tone={STATUS_TONE[invoice.status]}>{invoice.status}</Badge>
                 <PdfLinkButton
                   href={`/api/export/invoice/${invoice.id}`}
-                  title={`Invoice ${invoice.invoice_number}`}
                   filename={invoice.invoice_number}
+                  title={`Invoice ${invoice.invoice_number}`}
                   className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand"
                 >
-                  <Download className="h-3.5 w-3.5" />
+                  <FileText className="h-3.5 w-3.5" />
                   PDF
                 </PdfLinkButton>
               </div>

@@ -108,21 +108,36 @@ export async function recordInvoicePayment(_prev: FinanceState, form: FormData):
  * shape for it — this just lets a Finance user fire it at several invoices
  * without opening each case individually.
  */
-export async function bulkRecordPayments(invoiceIds: string[], reference: string, paymentMethod: string): Promise<FinanceState> {
+export interface BulkPaymentResult {
+  paid: number;
+  /** One message per invoice that was refused, de-duplicated by the caller for display. */
+  failures: string[];
+}
+
+export async function bulkRecordPayments(invoiceIds: string[], reference: string, paymentMethod: string): Promise<BulkPaymentResult> {
   await requireSession();
-  if (invoiceIds.length === 0) return { error: "Select at least one invoice.", ok: null };
+  if (invoiceIds.length === 0) return { paid: 0, failures: ["Select at least one invoice."] };
 
   const supabase = await createClient();
+  const failures: string[] = [];
+  let paid = 0;
+  // Every invoice is attempted, and the outcome of each is reported back.
+  // This used to return on the first refusal, which left the earlier
+  // invoices paid, the later ones untouched and the person reading
+  // "stopped after a problem on one invoice" with no way to tell which of
+  // their ten had gone through. Each call is its own transaction inside the
+  // RPC, so there is nothing to roll back — only something to report.
   for (const invoiceId of invoiceIds) {
     const { error } = await supabase.rpc("edospmis_record_payment", {
       p_invoice_id: invoiceId,
       p_reference: reference.trim() || null,
       p_payment_method: paymentMethod.trim() || null,
     });
-    if (error) return { error: `Stopped after a problem on one invoice: ${error.message}`, ok: null };
+    if (error) failures.push(error.message);
+    else paid++;
   }
   revalidatePath("/app/reports/invoices");
-  return { error: null, ok: `${invoiceIds.length} invoice${invoiceIds.length === 1 ? "" : "s"} marked paid.` };
+  return { paid, failures };
 }
 
 export async function setSodSettings(_prev: FinanceState, form: FormData): Promise<FinanceState> {

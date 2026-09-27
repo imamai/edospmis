@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
-import { documentResponse, fetchLogoDataUrl, type DocumentExport } from "@/lib/export/document";
+import { documentResponse, fetchLogoDataUrl, type DocumentExport, documentError } from "@/lib/export/document";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { PRItem, PurchaseOrder } from "@/lib/database.types";
 
@@ -9,7 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await requireSession();
   if (!can(session, "procurement.po.view")) {
-    return NextResponse.json({ error: "You don't have permission to view purchase orders." }, { status: 403 });
+    return documentError("You don't have permission to view purchase orders.", 403);
   }
 
   const supabase = await createClient();
@@ -19,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .eq("id", id)
     .eq("tenant_id", session.tenant.id)
     .maybeSingle();
-  if (!po) return NextResponse.json({ error: "Purchase order not found." }, { status: 404 });
+  if (!po) return documentError("Purchase order not found.", 404);
 
   const record = po as unknown as PurchaseOrder & {
     edospmis_suppliers: { name: string } | null;

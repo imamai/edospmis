@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Printer, Search } from "lucide-react";
 import { ExportLinks } from "@/components/ui/export-links";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { FilterCard, FilterField, filterControl } from "@/components/ui/filter-card";
 import { PERIOD_OPTIONS, type ReportFilterFlags } from "@/lib/report-filters";
 
@@ -45,6 +46,7 @@ export function ReportFilterForm({
   options,
   canExport,
   periodLabel,
+  reportTitle,
 }: {
   reportKey: string;
   flags: ReportFilterFlags;
@@ -52,6 +54,7 @@ export function ReportFilterForm({
   options: FilterOptions;
   canExport: boolean;
   periodLabel: string;
+  reportTitle: string;
 }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
@@ -120,16 +123,18 @@ export function ReportFilterForm({
                 <ExportLinks base={exportBase} />
                 {/* Printing the screen stops wherever the browser breaks the
                     page. This opens the report's own PDF — the same query, run
-                    again on the server, every row — and they print that. */}
-                <a
+                    again on the server, every row — in the same document
+                    viewer a PO, GRN or invoice opens in, and they print from
+                    there. */}
+                <PdfLinkButton
                   href={`${exportBase}${q ? "&" : "?"}format=pdf`}
-                  target="_blank"
-                  rel="noopener"
+                  title={`${reportTitle} — ${periodLabel.toLowerCase()}`}
+                  filename={reportKey}
                   className="flex h-11 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-soft transition-colors hover:border-brand hover:text-brand"
                 >
                   <Printer className="h-4 w-4" aria-hidden="true" />
                   Print
-                </a>
+                </PdfLinkButton>
               </>
             )}
           </>

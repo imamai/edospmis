@@ -53,10 +53,16 @@ export function tableResponse(format: ExportFormat, table: TableExport): Respons
 }
 
 function file(body: Uint8Array, filename: string, type: string): Response {
+  // A PDF is sent "inline" so that opening it shows the report — the browser's
+  // own PDF view, with print and save on it. As an attachment (which is what
+  // every format used to send) the Print link could only ever download the
+  // file and leave a blank tab behind. A spreadsheet has nothing to show in a
+  // browser, so CSV and XLSX stay attachments.
+  const disposition = type === "application/pdf" ? "inline" : "attachment";
   return new Response(body as unknown as BodyInit, {
     headers: {
       "Content-Type": type,
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `${disposition}; filename="${filename}"`,
       "Cache-Control": "no-store",
     },
   });

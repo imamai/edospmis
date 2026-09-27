@@ -77,6 +77,13 @@ export default async function ReportDetailPage({
   const period = resolvePeriod(sp);
   const data = await getAnalytics(session.tenant.id, { from: period.from, to: period.to });
   const canExport = can(session, "reports.export");
+  // A document link is only offered to someone who can open it. The export
+  // routes enforce this too — that is where it actually matters — but a link
+  // that always answers "you don't have permission" is a dead end, so the
+  // number stays plain text instead.
+  const canViewPo = can(session, "procurement.po.view");
+  const canViewGrn = can(session, "receiving.grn.view");
+  const canViewInvoice = can(session, "finance.invoice.view");
 
   const q = (sp.q ?? "").trim().toLowerCase();
   const statusFilter = sp.status ?? "";
@@ -213,6 +220,7 @@ export default async function ReportDetailPage({
         }}
         canExport={canExport}
         periodLabel={period.label}
+        reportTitle={meta.title}
       />
 
       {key === "aging" && (
@@ -546,14 +554,18 @@ export default async function ReportDetailPage({
                   {filteredPos.map((r) => (
                     <tr key={r.po_id} className="border-b border-line last:border-0">
                       <td className="py-2 pr-4">
-                        <PdfLinkButton
-                          href={`/api/export/po/${r.po_id}`}
-                          title={`Purchase order ${r.po_number}`}
-                          filename={r.po_number}
-                          className="font-mono text-xs text-brand hover:underline"
-                        >
-                          {r.po_number}
-                        </PdfLinkButton>
+                        {canViewPo ? (
+                          <PdfLinkButton
+                            href={`/api/export/po/${r.po_id}`}
+                            title={`Purchase order ${r.po_number}`}
+                            filename={r.po_number}
+                            className="font-mono text-xs text-brand hover:underline"
+                          >
+                            {r.po_number}
+                          </PdfLinkButton>
+                        ) : (
+                          <span className="font-mono text-xs text-ink">{r.po_number}</span>
+                        )}
                       </td>
                       <td className="py-2 pr-4 tnum">
                         <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
@@ -606,24 +618,32 @@ export default async function ReportDetailPage({
                         {/* Same pattern as the purchase-order report: the
                             number opens the document itself, to read, print
                             or save. */}
-                        <PdfLinkButton
-                          href={`/api/export/grn/${r.grn_id}`}
-                          title={`Goods received note ${r.grn_number}`}
-                          filename={r.grn_number}
-                          className="font-mono text-xs text-brand hover:underline"
-                        >
-                          {r.grn_number}
-                        </PdfLinkButton>
+                        {canViewGrn ? (
+                          <PdfLinkButton
+                            href={`/api/export/grn/${r.grn_id}`}
+                            title={`Goods received note ${r.grn_number}`}
+                            filename={r.grn_number}
+                            className="font-mono text-xs text-brand hover:underline"
+                          >
+                            {r.grn_number}
+                          </PdfLinkButton>
+                        ) : (
+                          <span className="font-mono text-xs text-ink">{r.grn_number}</span>
+                        )}
                       </td>
                       <td className="py-2 pr-4">
-                        <PdfLinkButton
-                          href={`/api/export/po/${r.po_id}`}
-                          title={`Purchase order ${r.po_number}`}
-                          filename={r.po_number}
-                          className="font-mono text-xs text-ink-soft hover:text-brand hover:underline"
-                        >
-                          {r.po_number}
-                        </PdfLinkButton>
+                        {canViewPo ? (
+                          <PdfLinkButton
+                            href={`/api/export/po/${r.po_id}`}
+                            title={`Purchase order ${r.po_number}`}
+                            filename={r.po_number}
+                            className="font-mono text-xs text-ink-soft hover:text-brand hover:underline"
+                          >
+                            {r.po_number}
+                          </PdfLinkButton>
+                        ) : (
+                          <span className="font-mono text-xs text-ink-soft">{r.po_number}</span>
+                        )}
                       </td>
                       <td className="py-2 pr-4 tnum">
                         <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
@@ -652,7 +672,7 @@ export default async function ReportDetailPage({
             {filteredInvoices.length === 0 ? (
               <p className="text-sm text-ink-faint">{invoiceRows.length === 0 ? "No invoices submitted in this period." : "Nothing matches these filters."}</p>
             ) : (
-              <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} />
+              <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} canViewDocument={canViewInvoice} />
             )}
             <RecordCount shown={filteredInvoices.length} total={invoiceRows.length} noun="invoice" />
           </CardBody>

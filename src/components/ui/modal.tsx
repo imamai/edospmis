@@ -11,6 +11,8 @@ const SIZES = {
   md: "max-w-md",
   lg: "max-w-xl",
   xl: "max-w-4xl",
+  // Wide enough to show an A4 page at a readable zoom — see `flush` below.
+  full: "max-w-5xl",
 };
 
 const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
@@ -37,6 +39,8 @@ export function Modal({
   children,
   size = "md",
   dismissible = true,
+  headerActions,
+  flush = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -45,6 +49,15 @@ export function Modal({
   children: React.ReactNode;
   size?: keyof typeof SIZES;
   dismissible?: boolean;
+  /** Controls belonging to the dialog itself rather than to a form inside it, sitting beside the close button. */
+  headerActions?: React.ReactNode;
+  /**
+   * For a dialog whose child *is* the content — a document, not a form. The
+   * body loses its padding and the panel takes a tall fixed frame the child
+   * fills, instead of the card-with-padding-around-a-thing that reads as a
+   * second window nested inside the first.
+   */
+  flush?: boolean;
 }) {
   // "Have we hydrated yet" — a portal needs document.body, which does not
   // exist during the server render. Server snapshot false, client true.
@@ -109,7 +122,8 @@ export function Modal({
           "relative w-full border border-line bg-surface shadow-raised outline-none transition-all",
           // On a phone it rises from the bottom edge, which is where a thumb
           // is; from sm: up it is a centred dialog as before.
-          "max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl",
+          "rounded-t-2xl sm:rounded-xl",
+          flush ? "flex h-[92dvh] flex-col overflow-hidden" : "max-h-[90dvh] overflow-y-auto",
           SIZES[size],
         )}
       >
@@ -118,18 +132,21 @@ export function Modal({
             <h2 className="truncate text-[0.9375rem] font-semibold text-ink">{title}</h2>
             {description && <p className="mt-0.5 text-xs text-ink-faint">{description}</p>}
           </div>
-          {dismissible && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="shrink-0 rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-ink"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {headerActions}
+            {dismissible && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="shrink-0 rounded-lg p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="px-4 py-4 sm:px-5">{children}</div>
+        <div className={cn(flush ? "min-h-0 flex-1" : "px-4 py-4 sm:px-5")}>{children}</div>
       </div>
     </div>,
     document.body,
