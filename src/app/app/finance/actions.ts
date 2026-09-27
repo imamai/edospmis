@@ -156,6 +156,25 @@ export async function setSodSettings(_prev: FinanceState, form: FormData): Promi
   return { error: null, ok: "Settings saved." };
 }
 
+export async function setMatchTolerances(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+  const session = await requireSession();
+  const pct = Number(form.get("price_pct") ?? 0);
+  const flat = Math.round(Math.max(0, Number(form.get("price_amount") ?? 0)) * 100);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    return { error: "A percentage tolerance has to be between 0 and 100.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_set_match_tolerances", {
+    p_tenant_id: session.tenant.id,
+    p_price_pct: pct,
+    p_price_cents: flat,
+  });
+  if (error) return { error: error.message, ok: null };
+  revalidatePath("/app/settings/segregation-of-duties");
+  return { error: null, ok: "Tolerance saved." };
+}
+
 export async function createDelegation(_prev: FinanceState, form: FormData): Promise<FinanceState> {
   await requireSession();
   const roleId = String(form.get("role_id") ?? "");

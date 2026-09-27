@@ -554,7 +554,7 @@ export interface Delivery {
  * ------------------------------------------------------------------ */
 
 export type InvoiceStatus = "submitted" | "matched" | "exception" | "approved" | "paid" | "void";
-export type MatchExceptionType = "quantity_mismatch" | "price_mismatch" | "missing_grn";
+export type MatchExceptionType = "quantity_mismatch" | "price_mismatch" | "missing_grn" | "over_billing" | "unordered_item";
 export type MatchExceptionStatus = "open" | "resolved";
 
 export interface InvoiceItem {

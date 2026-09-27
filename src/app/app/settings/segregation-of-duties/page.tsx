@@ -1,7 +1,8 @@
 import { requireSession, can } from "@/lib/data/session";
-import { getSodSettings } from "@/lib/data/finance";
+import { getSodSettings, getMatchTolerances } from "@/lib/data/finance";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { SodForm } from "./sod-form";
+import { ToleranceForm } from "./tolerance-form";
 
 export default async function SegregationOfDutiesPage() {
   const session = await requireSession();
@@ -13,21 +14,32 @@ export default async function SegregationOfDutiesPage() {
     );
   }
 
-  const settings = await getSodSettings(session.tenant.id);
+  const [settings, tolerances] = await Promise.all([
+    getSodSettings(session.tenant.id),
+    getMatchTolerances(session.tenant.id),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5 lg:max-w-3xl">
       <div>
-        <h1 className="text-xl font-semibold text-ink">Segregation of duties</h1>
+        <h1 className="text-xl font-semibold text-ink">Finance controls</h1>
         <p className="mt-1 text-sm text-ink-faint">
-          Off by default. Turn a rule on once your team is big enough that the same person shouldn&rsquo;t play both roles.
+          Off by default. Turn a rule on once your team is big enough that the same person shouldn&rsquo;t play both roles,
+          and set a match tolerance once small price differences are costing more attention than they are worth.
         </p>
       </div>
 
       <Card>
-        <CardHeader title="Conflict rules" />
+        <CardHeader title="Conflict rules" subtitle="Segregation of duties" />
         <CardBody>
           <SodForm settings={settings} />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Match tolerance" subtitle="How close an invoice has to be to the order" />
+        <CardBody>
+          <ToleranceForm tolerances={tolerances} />
         </CardBody>
       </Card>
     </div>

@@ -533,7 +533,37 @@ export default async function ReportDetailPage({
 
       {key === "purchase-orders" && (
         <Card>
-          <CardHeader title={"Purchase orders issued in this period"} />
+          {/* An issued order is money committed from the moment it goes to
+              the supplier. Until now the only spend on show was spend already
+              invoiced, which understates what the budget is carrying. */}
+          <CardHeader
+            title={"Purchase orders issued in this period"}
+            subtitle="An issued order commits the money, whether or not an invoice has arrived."
+            action={
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                <span className="text-ink-soft">
+                  Committed:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {formatMoney(filteredPos.reduce((sum, r) => sum + r.total_cents, 0))}
+                  </span>
+                </span>
+                <span className="text-ink-soft">
+                  Billed:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {formatMoney(filteredPos.reduce((sum, r) => sum + r.invoiced_net_cents, 0))}
+                  </span>
+                </span>
+                <span className="text-ink-soft">
+                  Still to come:{" "}
+                  <span className="tnum font-semibold text-attention">
+                    {formatMoney(
+                      filteredPos.reduce((sum, r) => sum + Math.max(0, r.total_cents - r.invoiced_net_cents), 0),
+                    )}
+                  </span>
+                </span>
+              </div>
+            }
+          />
           <CardBody className="overflow-x-auto">
             {filteredPos.length === 0 ? (
               <p className="text-sm text-ink-faint">{poRows.length === 0 ? "No purchase orders issued in this period." : "Nothing matches these filters."}</p>
@@ -547,6 +577,7 @@ export default async function ReportDetailPage({
                     <th className="pb-2 pr-4 font-medium">Supplier</th>
                     <th className="pb-2 pr-4 font-medium">Status</th>
                     <th className="pb-2 pr-4 text-right font-medium">Total</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Billed</th>
                     <th className="pb-2 font-medium">Issued</th>
                   </tr>
                 </thead>
@@ -582,6 +613,15 @@ export default async function ReportDetailPage({
                         <Badge tone={r.status === "issued" ? "good" : r.status === "pending_approval" ? "attention" : "critical"}>{r.status}</Badge>
                       </td>
                       <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(r.total_cents, { currency: r.currency })}</td>
+                      <td className="py-2 pr-4 text-right tnum">
+                        {r.invoiced_net_cents === 0 ? (
+                          <span className="text-ink-faint">—</span>
+                        ) : (
+                          <span className={r.invoiced_net_cents >= r.total_cents ? "text-good" : "text-attention"}>
+                            {formatMoney(r.invoiced_net_cents, { currency: r.currency })}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 tnum text-ink-soft">{formatDate(r.issued_at)}</td>
                     </tr>
                   ))}

@@ -97,8 +97,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               nudge={
                 clientName && fulfilmentDetail && !fulfilmentDetail.delivery?.client_confirmed_at
                   ? "Delivery isn't confirmed yet — you can still close if this case doesn't need one."
-                  : financeDetail?.invoice && financeDetail.invoice.status !== "paid"
-                    ? "Payment hasn't been recorded yet — you can still close if this case doesn't need it."
+                  : (financeDetail?.invoices ?? []).some((i) => i.status !== "paid" && i.status !== "void")
+                    ? "Payment hasn't been recorded on every invoice yet — you can still close if this case doesn't need it."
                     : null
               }
             />

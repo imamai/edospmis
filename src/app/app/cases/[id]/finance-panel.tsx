@@ -111,7 +111,12 @@ export function FinancePanel({
   emphasize?: boolean;
 }) {
   const router = useRouter();
-  const invoice = detail.invoice;
+  const invoices = detail.invoices;
+  const billedNet = detail.invoicedNetCents;
+  // Room left on the order. An order billed in parts stays open to the next
+  // invoice until its value is used up; a fully billed one does not invite
+  // another, which would only be caught later as over-billing.
+  const remainingNet = Math.max(0, matchBasis.poTotalCents - billedNet);
 
   const [submitting, setSubmitting] = useState(false);
   const [rows, setRows] = useState<ItemRow[]>(
@@ -128,10 +133,11 @@ export function FinancePanel({
   const [resolveState, setResolveState] = useState<FinanceState>(initial);
   const [resolvePending, startResolve] = useTransition();
 
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approvePending, startApprove] = useTransition();
   const [approveError, setApproveError] = useState<string | null>(null);
 
-  const [paying, setPaying] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [payState, setPayState] = useState<FinanceState>(initial);
   const [payPending, startPay] = useTransition();
 
@@ -161,12 +167,14 @@ export function FinancePanel({
     });
   }
 
-  function approve() {
-    if (!invoice) return;
+  function approve(invoiceId: string) {
+    setApprovingId(invoiceId);
+    setApproveError(null);
     startApprove(async () => {
-      const result = await approveInvoice(invoice.id, caseId);
+      const result = await approveInvoice(invoiceId, caseId);
       if (result.error) setApproveError(result.error);
       else router.refresh();
+      setApprovingId(null);
     });
   }
 
@@ -177,14 +185,15 @@ export function FinancePanel({
       const result = await recordInvoicePayment(initial, form);
       setPayState(result);
       if (result.ok) {
-        setPaying(false);
+        setPayingId(null);
         router.refresh();
       }
     });
   }
 
-  const resolvingException = invoice?.exceptions.find((ex) => ex.id === resolvingId);
+  const resolvingException = invoices.flatMap((i) => i.exceptions).find((ex) => ex.id === resolvingId);
   const receiptRecorded = matchBasis.grnNumbers.length > 0;
+  const canBillMore = receiptRecorded && remainingNet > 0;
 
   return (
     <Card raised={emphasize}>
@@ -195,36 +204,71 @@ export function FinancePanel({
         action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
       />
       <CardBody className="flex flex-col gap-4">
-        {!invoice && (
-          <MatchBasisNote basis={matchBasis} currency={currency} />
+        {invoices.length === 0 && <MatchBasisNote basis={matchBasis} currency={currency} />}
+
+        {/* An order billed in parts: what has gone through it so far, and what
+            is still open to be billed. */}
+        {invoices.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs">
+            <span className="text-ink-soft">
+              Ordered <span className="tnum font-semibold text-ink">{formatMoney(matchBasis.poTotalCents, { currency })}</span>
+            </span>
+            <span className="text-ink-soft">
+              Billed so far <span className="tnum font-semibold text-ink">{formatMoney(billedNet, { currency })}</span>
+              <span className="text-ink-faint">
+                {" "}
+                ({invoices.length} invoice{invoices.length === 1 ? "" : "s"})
+              </span>
+            </span>
+            <span className="text-ink-soft">
+              Still open{" "}
+              <span className={`tnum font-semibold ${remainingNet > 0 ? "text-attention" : "text-good"}`}>
+                {formatMoney(remainingNet, { currency })}
+              </span>
+            </span>
+          </div>
         )}
 
         {/* The receipt comes first, so the step isn't offered before it can
             succeed — edospmis_submit_invoice refuses it outright. */}
-        {!invoice && canSubmit && !receiptRecorded && (
+        {canSubmit && !receiptRecorded && (
           <p className="text-sm text-ink-faint">
             Record the goods received above before entering the supplier&rsquo;s invoice — the invoice is matched against the
             receipt, not against the order alone.
           </p>
         )}
 
-        {!invoice && canSubmit && receiptRecorded && (
+        {canSubmit && canBillMore && (
           <>
             <Button size="sm" variant="secondary" onClick={() => setSubmitting(true)}>
-              Submit invoice
+              {invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
             </Button>
-            <Modal open={submitting} onClose={() => setSubmitting(false)} title="Submit invoice" dismissible={!submitPending} size="lg">
+            <Modal
+              open={submitting}
+              onClose={() => setSubmitting(false)}
+              title={invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
+              dismissible={!submitPending}
+              size="lg"
+            >
               <form onSubmit={submitForm} className="flex flex-col gap-3">
                 <input type="hidden" name="case_id" value={caseId} />
                 <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
-                  These lines are prefilled from <span className="font-semibold text-ink">{matchBasis.poNumber}</span>. What you
-                  enter is checked against that order&rsquo;s total and against the quantity actually received — anything that
-                  doesn&rsquo;t line up is raised as a match exception rather than silently accepted.
+                  These lines are prefilled from <span className="font-semibold text-ink">{matchBasis.poNumber}</span>. Each line
+                  is checked against that order&rsquo;s unit price, and the running total against what has already been billed
+                  and received — anything that doesn&rsquo;t line up is raised as a match exception rather than silently
+                  accepted.
+                  {invoices.length > 0 && (
+                    <>
+                      {" "}
+                      <span className="font-semibold text-ink">{formatMoney(remainingNet, { currency })}</span> of this order is
+                      still unbilled; edit the quantities to bill only this delivery.
+                    </>
+                  )}
                 </p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <TextInput label="Supplier invoice #" name="invoice_number" required />
-                  <TextInput label="Payment terms" name="payment_terms" placeholder="e.g. Net 30" hint="Optional" />
-                  <TextInput label="Due date" name="due_date" type="date" hint="Optional" />
+                  <TextInput label="Payment terms" name="payment_terms" placeholder="e.g. Net 30" hint="Sets the due date" />
+                  <TextInput label="Due date" name="due_date" type="date" hint="Optional — otherwise from the terms" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -274,17 +318,24 @@ export function FinancePanel({
           </>
         )}
 
-        {!invoice && !canSubmit && (
+        {canSubmit && receiptRecorded && !canBillMore && invoices.length > 0 && (
+          <p className="text-xs text-ink-faint">
+            The whole of {matchBasis.poNumber} has been billed. Anything further would exceed the order.
+          </p>
+        )}
+
+        {invoices.length === 0 && !canSubmit && (
           <p className="text-sm text-ink-faint">No invoice has been submitted for this case yet.</p>
         )}
 
-        {invoice && (
-          <div className="flex flex-col gap-3">
+        {invoices.map((invoice) => (
+          <div key={invoice.id} className="flex flex-col gap-3 border-t border-line pt-3 first-of-type:border-t-0 first-of-type:pt-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-ink">Invoice {invoice.invoice_number}</p>
                 <p className="text-xs text-ink-faint">
                   {formatMoney(invoice.total_cents, { currency: invoice.currency })} · submitted {formatDate(invoice.submitted_at)}
+                  {invoice.due_date ? ` · due ${formatDate(invoice.due_date)}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -325,28 +376,12 @@ export function FinancePanel({
               </div>
             )}
 
-            <Modal
-              open={resolvingId !== null}
-              onClose={() => setResolvingId(null)}
-              title="Resolve match exception"
-              description={resolvingException?.detail}
-              dismissible={!resolvePending}
-            >
-              <form onSubmit={resolveForm} className="flex flex-col gap-3">
-                <input type="hidden" name="exception_id" value={resolvingId ?? ""} />
-                <input type="hidden" name="case_id" value={caseId} />
-                <TextArea label="How was this resolved?" name="resolution_note" rows={2} />
-                {resolveState.error && <p className="text-xs text-critical">{resolveState.error}</p>}
-                <ModalFormActions onCancel={() => setResolvingId(null)} submitLabel="Save" busy={resolvePending} />
-              </form>
-            </Modal>
-
             {invoice.status === "matched" && canApprove && (
               <div className="flex flex-col items-start gap-1">
-                <Button size="sm" busy={approvePending} onClick={approve}>
+                <Button size="sm" busy={approvePending && approvingId === invoice.id} onClick={() => approve(invoice.id)}>
                   Approve for payment
                 </Button>
-                {approveError && <p className="text-xs text-critical">{approveError}</p>}
+                {approveError && approvingId === invoice.id && <p className="text-xs text-critical">{approveError}</p>}
               </div>
             )}
 
@@ -362,30 +397,9 @@ export function FinancePanel({
             )}
 
             {invoice.status === "approved" && canRecordPayment && (
-              <>
-                <Button size="sm" variant="secondary" onClick={() => setPaying(true)}>
-                  Record payment now
-                </Button>
-                <Modal open={paying} onClose={() => setPaying(false)} title="Record payment" dismissible={!payPending} size="sm">
-                  <form onSubmit={payForm} className="flex flex-col gap-3">
-                    <input type="hidden" name="invoice_id" value={invoice.id} />
-                    <input type="hidden" name="case_id" value={caseId} />
-                    <SelectInput label="Payment method" name="payment_method" required defaultValue="">
-                      <option value="" disabled>
-                        Choose how this was paid
-                      </option>
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </SelectInput>
-                    <TextInput label="Payment reference" name="reference" hint="Optional — a transaction ID or cheque number" />
-                    {payState.error && <p className="text-xs text-critical">{payState.error}</p>}
-                    <ModalFormActions onCancel={() => setPaying(false)} submitLabel="Record payment" busy={payPending} />
-                  </form>
-                </Modal>
-              </>
+              <Button size="sm" variant="secondary" onClick={() => setPayingId(invoice.id)}>
+                Record payment now
+              </Button>
             )}
 
             {invoice.status === "paid" && (
@@ -396,7 +410,45 @@ export function FinancePanel({
               </p>
             )}
           </div>
-        )}
+        ))}
+
+        {/* One dialog each, keyed by which invoice is being acted on, rather
+            than one per invoice rendered. */}
+        <Modal
+          open={resolvingId !== null}
+          onClose={() => setResolvingId(null)}
+          title="Resolve match exception"
+          description={resolvingException?.detail}
+          dismissible={!resolvePending}
+        >
+          <form onSubmit={resolveForm} className="flex flex-col gap-3">
+            <input type="hidden" name="exception_id" value={resolvingId ?? ""} />
+            <input type="hidden" name="case_id" value={caseId} />
+            <TextArea label="How was this resolved?" name="resolution_note" rows={2} />
+            {resolveState.error && <p className="text-xs text-critical">{resolveState.error}</p>}
+            <ModalFormActions onCancel={() => setResolvingId(null)} submitLabel="Save" busy={resolvePending} />
+          </form>
+        </Modal>
+
+        <Modal open={payingId !== null} onClose={() => setPayingId(null)} title="Record payment" dismissible={!payPending} size="sm">
+          <form onSubmit={payForm} className="flex flex-col gap-3">
+            <input type="hidden" name="invoice_id" value={payingId ?? ""} />
+            <input type="hidden" name="case_id" value={caseId} />
+            <SelectInput label="Payment method" name="payment_method" required defaultValue="">
+              <option value="" disabled>
+                Choose how this was paid
+              </option>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </SelectInput>
+            <TextInput label="Payment reference" name="reference" hint="Optional — a transaction ID or cheque number" />
+            {payState.error && <p className="text-xs text-critical">{payState.error}</p>}
+            <ModalFormActions onCancel={() => setPayingId(null)} submitLabel="Record payment" busy={payPending} />
+          </form>
+        </Modal>
       </CardBody>
     </Card>
   );

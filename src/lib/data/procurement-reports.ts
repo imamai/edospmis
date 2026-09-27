@@ -84,6 +84,16 @@ export interface PurchaseOrderReportRow {
   currency: string;
   status: string;
   issued_at: string;
+  /**
+   * Billed against this order so far, net of tax and of anything voided.
+   *
+   * An issued order is money committed: the obligation exists from the moment
+   * it goes to the supplier, whether or not an invoice has arrived. What is
+   * committed and not yet billed is the part of that obligation still to
+   * land, and it appeared nowhere — so the only spend the system could show
+   * was spend that had already been invoiced.
+   */
+  invoiced_net_cents: number;
 }
 
 export async function getPurchaseOrderReport(tenantId: string, period?: ReportPeriod): Promise<PurchaseOrderReportRow[]> {
@@ -97,11 +107,25 @@ export async function getPurchaseOrderReport(tenantId: string, period?: ReportPe
   const { data: pos } = await query.order("issued_at", { ascending: false });
   if (!pos || pos.length === 0) return [];
 
-  const caseByIdMap = await lookupCases(supabase, tenantId, pos.map((p) => p.case_id));
+  const [caseByIdMap, { data: invoices }] = await Promise.all([
+    lookupCases(supabase, tenantId, pos.map((p) => p.case_id)),
+    supabase
+      .from("edospmis_invoices")
+      .select("po_id, subtotal_cents, status")
+      .eq("tenant_id", tenantId)
+      .in("po_id", pos.map((p) => p.id)),
+  ]);
+  const billedByPo = new Map<string, number>();
+  for (const i of invoices ?? []) {
+    if (i.status === "void") continue;
+    billedByPo.set(i.po_id, (billedByPo.get(i.po_id) ?? 0) + i.subtotal_cents);
+  }
+
   return pos.map((p) => {
     const c = caseByIdMap.get(p.case_id);
     const supplier = p.edospmis_suppliers as unknown as { name: string } | null;
     return {
+      invoiced_net_cents: billedByPo.get(p.id) ?? 0,
       po_id: p.id,
       case_id: p.case_id,
       case_number: c?.case_number ?? "",

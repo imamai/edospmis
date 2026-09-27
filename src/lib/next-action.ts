@@ -55,24 +55,33 @@ export function computeNextAction(input: NextActionInput): { message: string; to
     };
   }
 
-  const invoice = financeDetail?.invoice;
-  if (invoice && can("finance.invoice.approve")) {
-    const openExceptions = invoice.exceptions.filter((e) => e.status === "open");
+  // An order can carry several invoices, so the rule speaks about the one
+  // that needs attention first, not about "the" invoice.
+  const invoices = (financeDetail?.invoices ?? []).filter((i) => i.status !== "void");
+  const live = invoices.length > 0;
+  if (live && can("finance.invoice.approve")) {
+    const openExceptions = invoices.flatMap((i) => i.exceptions.filter((e) => e.status === "open"));
     if (openExceptions.length > 0) {
+      const onInvoice = invoices.find((i) => i.exceptions.some((e) => e.status === "open"))!;
       return {
-        message: `Invoice has ${openExceptions.length} unresolved match exception${openExceptions.length > 1 ? "s" : ""}`,
+        message: `Invoice ${onInvoice.invoice_number} has ${openExceptions.length} unresolved match exception${openExceptions.length > 1 ? "s" : ""}`,
         tone: "attention",
       };
     }
-    if (invoice.status === "matched") {
-      return { message: `Invoice ${invoice.invoice_number} is matched and ready to approve`, tone: "info" };
+    const matched = invoices.find((i) => i.status === "matched");
+    if (matched) {
+      return { message: `Invoice ${matched.invoice_number} is matched and ready to approve`, tone: "info" };
     }
     // Approved but unpaid is a normal resting state, not something stuck:
     // payment is often run in a batch later rather than case by case. Say what
     // is true without implying the case cannot move on.
-    if (invoice.status === "approved") {
+    const approved = invoices.filter((i) => i.status === "approved");
+    if (approved.length > 0) {
       return {
-        message: `Invoice ${invoice.invoice_number} is approved and awaiting payment — the case can move on meanwhile`,
+        message:
+          approved.length === 1
+            ? `Invoice ${approved[0].invoice_number} is approved and awaiting payment — the case can move on meanwhile`
+            : `${approved.length} invoices are approved and awaiting payment — the case can move on meanwhile`,
         tone: "info",
       };
     }
@@ -95,7 +104,7 @@ export function computeNextAction(input: NextActionInput): { message: string; to
     // sat in Receiving until somebody happened to remember, and the invoice
     // that eventually arrived looked like it came from outside the process
     // rather than being its next step.
-    if (receivedTotal >= orderedTotal && !invoice && can("finance.invoice.create")) {
+    if (receivedTotal >= orderedTotal && !live && can("finance.invoice.create")) {
       return {
         message: `Everything on ${po.po_number} has been received — the supplier's invoice is the next step`,
         tone: "info",
@@ -107,16 +116,12 @@ export function computeNextAction(input: NextActionInput): { message: string; to
   // exception, but only someone who can approve invoices ever sees that; for
   // everyone else the case simply appeared in Finance with no receipt behind
   // it, which is exactly how invoicing came to look detached from the flow.
-  if (
-    invoice &&
-    invoice.status !== "paid" &&
-    invoice.status !== "void" &&
-    !settled &&
-    fulfilmentDetail &&
-    fulfilmentDetail.grns.length === 0
-  ) {
+  // Only reachable for invoices raised before migration 0039 made the receipt
+  // a precondition; kept because those rows still exist.
+  const unreceipted = invoices.find((i) => i.status !== "paid");
+  if (unreceipted && !settled && fulfilmentDetail && fulfilmentDetail.grns.length === 0) {
     return {
-      message: `Invoice ${invoice.invoice_number} was raised before anything was received — record the goods, or resolve it on the invoice`,
+      message: `Invoice ${unreceipted.invoice_number} was raised before anything was received — record the goods, or resolve it on the invoice`,
       tone: "attention",
     };
   }

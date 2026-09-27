@@ -27,9 +27,14 @@ function grns(received: number[]) {
   } as unknown as NextActionInput["fulfilmentDetail"];
 }
 
-function invoice(status: string) {
+function invoice(...statuses: string[]) {
   return {
-    invoice: { invoice_number: "SUP-INV-2208", status, exceptions: [] },
+    invoices: statuses.map((status, i) => ({
+      invoice_number: i === 0 ? "SUP-INV-2208" : `SUP-INV-220${8 + i}`,
+      status,
+      exceptions: [],
+    })),
+    invoicedNetCents: 0,
   } as unknown as NextActionInput["financeDetail"];
 }
 
@@ -83,6 +88,24 @@ describe("what a case is waiting for", () => {
   it("stops flagging that once the invoice is paid", () => {
     const result = computeNextAction(
       input({ caseStatus: "finance", fulfilmentDetail: grns([]), financeDetail: invoice("paid") }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("counts several approved invoices rather than naming one", () => {
+    const result = computeNextAction(
+      input({
+        caseStatus: "finance",
+        financeDetail: invoice("approved", "approved"),
+        permissions: new Set(["finance.invoice.approve"]),
+      }),
+    );
+    expect(result?.message).toBe("2 invoices are approved and awaiting payment — the case can move on meanwhile");
+  });
+
+  it("does not ask for an invoice once the order is part-billed", () => {
+    const result = computeNextAction(
+      input({ financeDetail: invoice("matched"), permissions: new Set(["finance.invoice.create"]) }),
     );
     expect(result).toBeNull();
   });

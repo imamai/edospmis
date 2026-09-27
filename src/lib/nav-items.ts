@@ -108,7 +108,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/app/settings/users", label: "Users", icon: Users, requires: "admin.users.manage" },
       { href: "/app/settings/roles", label: "Roles", icon: ShieldCheck, requires: "admin.roles.manage" },
       { href: "/app/settings/approval-rules", label: "Approval Rules", icon: Gavel, requires: "admin.approvals.manage" },
-      { href: "/app/settings/segregation-of-duties", label: "Segregation of Duties", icon: Scale, requires: "admin.approvals.manage" },
+      { href: "/app/settings/segregation-of-duties", label: "Finance controls", icon: Scale, requires: "admin.approvals.manage" },
       { href: "/app/settings/delegations", label: "Delegations", icon: UserCog, requires: "admin.approvals.manage" },
       { href: "/app/settings/webhooks", label: "Webhooks", icon: Webhook, requires: "admin.webhooks.manage" },
     ],

@@ -124,7 +124,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
         const rows = await getPurchaseOrderReport(session.tenant.id, reportPeriod);
         return {
           title: "Purchase orders",
-          header: ["PO number", "PR No.", "Department", "Supplier", "Status", "Total (KES)", "Issued"],
+          header: ["PO number", "PR No.", "Department", "Supplier", "Status", "Total (KES)", "Billed (KES)", "Still to come (KES)", "Issued"],
           rows: rows
             .filter(
               (r) =>
@@ -132,7 +132,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
                 (!statusFilter || r.status === statusFilter) &&
                 (!deptFilter || (r.department_name ?? "").toLowerCase() === deptFilter),
             )
-            .map((r) => [r.po_number, r.case_number, r.department_name ?? "—", r.supplier_name, r.status, r.total_cents / 100, r.issued_at]),
+            .map((r) => [r.po_number, r.case_number, r.department_name ?? "—", r.supplier_name, r.status, r.total_cents / 100, r.invoiced_net_cents / 100, Math.max(0, r.total_cents - r.invoiced_net_cents) / 100, r.issued_at]),
         };
       }
       case "goods-received": {
