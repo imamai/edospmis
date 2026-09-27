@@ -127,6 +127,14 @@ export interface GoodsReceivedReportRow {
   po_number: string;
   status: string;
   received_at: string;
+  /**
+   * Where this receipt has got to on the finance side — null when nothing has
+   * been invoiced against it yet. Receiving and invoicing are one chain, and
+   * this report used to end at the receipt, which is what made invoicing look
+   * like a separate system rather than the next step.
+   */
+  invoice_number: string | null;
+  invoice_status: string | null;
 }
 
 export async function getGoodsReceivedReport(tenantId: string, period?: ReportPeriod): Promise<GoodsReceivedReportRow[]> {
@@ -140,11 +148,25 @@ export async function getGoodsReceivedReport(tenantId: string, period?: ReportPe
   const { data: grns } = await query.order("received_at", { ascending: false });
   if (!grns || grns.length === 0) return [];
 
-  const caseByIdMap = await lookupCases(supabase, tenantId, grns.map((g) => g.case_id));
+  const [caseByIdMap, { data: invoices }] = await Promise.all([
+    lookupCases(supabase, tenantId, grns.map((g) => g.case_id)),
+    // One invoice per purchase order (there is a unique index on po_id), so
+    // this is a lookup, not an aggregate.
+    supabase
+      .from("edospmis_invoices")
+      .select("po_id, invoice_number, status")
+      .eq("tenant_id", tenantId)
+      .in("po_id", [...new Set(grns.map((g) => g.po_id))]),
+  ]);
+  const invoiceByPo = new Map((invoices ?? []).map((i) => [i.po_id, i]));
+
   return grns.map((g) => {
     const c = caseByIdMap.get(g.case_id);
     const po = g.edospmis_purchase_orders as unknown as { po_number: string } | null;
+    const invoice = invoiceByPo.get(g.po_id);
     return {
+      invoice_number: invoice?.invoice_number ?? null,
+      invoice_status: invoice?.status ?? null,
       grn_id: g.id,
       po_id: g.po_id,
       case_id: g.case_id,
@@ -164,6 +186,9 @@ export interface InvoiceReportRow {
   case_number: string;
   department_name: string | null;
   invoice_number: string;
+  /** The purchase order this invoice settles — an invoice never exists without one. */
+  po_id: string | null;
+  po_number: string | null;
   supplier_id: string | null;
   supplier_name: string;
   total_cents: number;
@@ -177,7 +202,7 @@ export async function getInvoiceReport(tenantId: string, period?: ReportPeriod):
   const supabase = await createClient();
   let query = supabase
     .from("edospmis_invoices")
-    .select("id, case_id, invoice_number, supplier_id, total_cents, currency, status, due_date, submitted_at, edospmis_suppliers(name)")
+    .select("id, case_id, po_id, invoice_number, supplier_id, total_cents, currency, status, due_date, submitted_at, edospmis_suppliers(name), edospmis_purchase_orders(po_number)")
     .eq("tenant_id", tenantId);
   if (period?.from) query = query.gte("submitted_at", period.from);
   if (period?.to) query = query.lte("submitted_at", period.to);
@@ -188,12 +213,15 @@ export async function getInvoiceReport(tenantId: string, period?: ReportPeriod):
   return invoices.map((i) => {
     const c = caseByIdMap.get(i.case_id);
     const supplier = i.edospmis_suppliers as unknown as { name: string } | null;
+    const po = i.edospmis_purchase_orders as unknown as { po_number: string } | null;
     return {
       invoice_id: i.id,
       case_id: i.case_id,
       case_number: c?.case_number ?? "",
       department_name: c?.department_name ?? null,
       invoice_number: i.invoice_number,
+      po_id: (i.po_id as string | null) ?? null,
+      po_number: po?.po_number ?? null,
       supplier_id: (i.supplier_id as string | null) ?? null,
       supplier_name: supplier?.name ?? "",
       total_cents: i.total_cents,

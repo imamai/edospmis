@@ -28,10 +28,12 @@ export function InvoicesTable({
   rows,
   canPay,
   canViewDocument,
+  canViewPo,
 }: {
   rows: InvoiceReportRow[];
   canPay: boolean;
   canViewDocument: boolean;
+  canViewPo: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -169,6 +171,7 @@ export function InvoicesTable({
                 </th>
               )}
               <th className="pb-2 pr-4 font-medium">Invoice number</th>
+              <th className="pb-2 pr-4 font-medium">PO number</th>
               <th className="pb-2 pr-4 font-medium">PR No.</th>
               <th className="pb-2 pr-4 font-medium">Department</th>
               <th className="pb-2 pr-4 font-medium">Supplier</th>
@@ -207,6 +210,23 @@ export function InvoicesTable({
                     </td>
                   )}
                   <td className="py-2 pr-4 font-mono text-xs text-ink">{r.invoice_number}</td>
+                  {/* An invoice always settles one purchase order — saying
+                      which one is what makes this a step in the chain rather
+                      than a standalone ledger. */}
+                  <td className="py-2 pr-4">
+                    {r.po_number && canViewPo ? (
+                      <PdfLinkButton
+                        href={`/api/export/po/${r.po_id}`}
+                        title={`Purchase order ${r.po_number}`}
+                        filename={r.po_number}
+                        className="font-mono text-xs text-ink-soft hover:text-brand hover:underline"
+                      >
+                        {r.po_number}
+                      </PdfLinkButton>
+                    ) : (
+                      <span className="font-mono text-xs text-ink-soft">{r.po_number ?? "—"}</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 tnum">
                     <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
                       {r.case_number}

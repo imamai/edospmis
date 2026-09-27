@@ -24,6 +24,45 @@ import type { FinanceDetail } from "@/lib/data/finance";
 import type { PRItem } from "@/lib/database.types";
 
 const initial: FinanceState = { error: null, ok: null };
+
+/**
+ * What this stage is waiting for, and what an invoice will be checked
+ * against when it arrives.
+ *
+ * Without it the Finance card was an empty box with a button, which is a
+ * large part of why invoicing read as something happening outside the
+ * process: nothing on the case connected the invoice about to be entered to
+ * the purchase order and the receipts directly above it.
+ */
+function MatchBasisNote({ basis, currency }: { basis: MatchBasis; currency: string }) {
+  const fullyReceived = basis.receivedQty >= basis.orderedQty;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-sm">
+      <p className="text-ink-soft">
+        Awaiting the supplier&rsquo;s invoice for{" "}
+        <span className="font-semibold text-ink">{basis.poNumber}</span>, which will be matched against it.
+      </p>
+      <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-faint">
+        <div className="flex gap-1.5">
+          <dt>Order total</dt>
+          <dd className="tnum font-semibold text-ink-soft">{formatMoney(basis.poTotalCents, { currency })}</dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>Received</dt>
+          <dd className={`tnum font-semibold ${fullyReceived ? "text-good" : "text-attention"}`}>
+            {basis.receivedQty} of {basis.orderedQty}
+          </dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>Against</dt>
+          <dd className="font-semibold text-ink-soft">
+            {basis.grnNumbers.length > 0 ? basis.grnNumbers.join(", ") : "no goods received note yet"}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 const STATUS_TONE = {
   submitted: "neutral",
   matched: "info",
@@ -41,11 +80,21 @@ interface ItemRow {
   unitCost: number;
 }
 
+/** The purchase order and receipts an invoice on this case will be matched against. */
+export interface MatchBasis {
+  poNumber: string;
+  poTotalCents: number;
+  orderedQty: number;
+  receivedQty: number;
+  grnNumbers: string[];
+}
+
 export function FinancePanel({
   caseId,
   poItems,
   currency,
   detail,
+  matchBasis,
   canSubmit,
   canApprove,
   canRecordPayment,
@@ -55,6 +104,7 @@ export function FinancePanel({
   poItems: PRItem[];
   currency: string;
   detail: FinanceDetail;
+  matchBasis: MatchBasis;
   canSubmit: boolean;
   canApprove: boolean;
   canRecordPayment: boolean;
@@ -144,6 +194,10 @@ export function FinancePanel({
         action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
       />
       <CardBody className="flex flex-col gap-4">
+        {!invoice && (
+          <MatchBasisNote basis={matchBasis} currency={currency} />
+        )}
+
         {!invoice && canSubmit && (
           <>
             <Button size="sm" variant="secondary" onClick={() => setSubmitting(true)}>
@@ -152,6 +206,11 @@ export function FinancePanel({
             <Modal open={submitting} onClose={() => setSubmitting(false)} title="Submit invoice" dismissible={!submitPending} size="lg">
               <form onSubmit={submitForm} className="flex flex-col gap-3">
                 <input type="hidden" name="case_id" value={caseId} />
+                <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
+                  These lines are prefilled from <span className="font-semibold text-ink">{matchBasis.poNumber}</span>. What you
+                  enter is checked against that order&rsquo;s total and against the quantity actually received — anything that
+                  doesn&rsquo;t line up is raised as a match exception rather than silently accepted.
+                </p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <TextInput label="Supplier invoice #" name="invoice_number" required />
                   <TextInput label="Payment terms" name="payment_terms" placeholder="e.g. Net 30" hint="Optional" />

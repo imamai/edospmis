@@ -1,11 +1,7 @@
 import { Info, AlertTriangle, AlertOctagon } from "lucide-react";
-import { can, type SessionContext } from "@/lib/data/session";
+import { type SessionContext } from "@/lib/data/session";
 import { slaStatus } from "@/lib/utils";
-import type { ProcurementDetail } from "@/lib/data/procurement";
-import type { FulfilmentDetail } from "@/lib/data/fulfilment";
-import type { FinanceDetail } from "@/lib/data/finance";
-
-type Tone = "info" | "attention" | "critical";
+import { computeNextAction, type Tone, type NextActionInput as DomainInput } from "@/lib/next-action";
 
 const TONE_CLASS: Record<Tone, string> = {
   info: "border-info/30 bg-info-soft text-info",
@@ -19,82 +15,11 @@ const TONE_ICON: Record<Tone, typeof Info> = {
   critical: AlertOctagon,
 };
 
-export interface NextActionInput {
-  session: SessionContext;
-  canDecide: boolean;
-  canSubmit: boolean;
-  caseStatus: string;
-  pendingApprovalRoleName: string | null;
-  pendingApprovalDueAt: string | null;
-  procurementDetail: ProcurementDetail | null;
-  fulfilmentDetail: FulfilmentDetail | null;
-  financeDetail: FinanceDetail | null;
-}
+/** The page passes its session; the rule itself takes only a permission set, so it can be tested. */
+export type NextActionInput = Omit<DomainInput, "permissions" | "slaStatus"> & { session: SessionContext };
 
-function computeNextAction(input: NextActionInput): { message: string; tone: Tone } | null {
-  const { session, canDecide, canSubmit, caseStatus, pendingApprovalRoleName, pendingApprovalDueAt, procurementDetail, fulfilmentDetail, financeDetail } = input;
-
-  if (canSubmit && caseStatus === "returned") {
-    return { message: "This request was returned for correction — edit it and submit again", tone: "attention" };
-  }
-
-  if (canDecide && pendingApprovalRoleName) {
-    const sla = pendingApprovalDueAt ? slaStatus(pendingApprovalDueAt) : null;
-    return {
-      message: `Awaiting your approval as ${pendingApprovalRoleName}`,
-      tone: sla?.status === "breached" ? "critical" : sla?.status === "warning" ? "attention" : "info",
-    };
-  }
-
-  const invoice = financeDetail?.invoice;
-  if (invoice && can(session, "finance.invoice.approve")) {
-    const openExceptions = invoice.exceptions.filter((e) => e.status === "open");
-    if (openExceptions.length > 0) {
-      return {
-        message: `Invoice has ${openExceptions.length} unresolved match exception${openExceptions.length > 1 ? "s" : ""}`,
-        tone: "attention",
-      };
-    }
-    if (invoice.status === "matched") {
-      return { message: `Invoice ${invoice.invoice_number} is matched and ready to approve`, tone: "info" };
-    }
-    // Approved but unpaid is a normal resting state, not something stuck:
-    // payment is often run in a batch later rather than case by case. Say what
-    // is true without implying the case cannot move on.
-    if (invoice.status === "approved") {
-      return {
-        message: `Invoice ${invoice.invoice_number} is approved and awaiting payment — the case can move on meanwhile`,
-        tone: "info",
-      };
-    }
-  }
-
-  const po = procurementDetail?.po;
-  if (fulfilmentDetail && po && can(session, "receiving.grn.create")) {
-    const orderedTotal = po.items.reduce((sum, i) => sum + i.qty, 0);
-    const receivedTotal = fulfilmentDetail.grns.reduce(
-      (sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0),
-      0,
-    );
-    if (receivedTotal < orderedTotal) {
-      return { message: `Items pending receipt against ${po.po_number}`, tone: "info" };
-    }
-  }
-
-  if (po?.status === "pending_approval" && can(session, "procurement.po.approve")) {
-    return { message: `Purchase order ${po.po_number} is awaiting your approval`, tone: "attention" };
-  }
-
-  const delivery = fulfilmentDetail?.delivery;
-  if (delivery?.status === "dispatched" && can(session, "delivery.complete")) {
-    return { message: "Delivery is dispatched — confirm once received", tone: "info" };
-  }
-
-  return null;
-}
-
-export function NextActionBanner(input: NextActionInput) {
-  const result = computeNextAction(input);
+export function NextActionBanner({ session, ...rest }: NextActionInput) {
+  const result = computeNextAction({ ...rest, permissions: session.permissions, slaStatus });
   if (!result) return null;
   const Icon = TONE_ICON[result.tone];
 

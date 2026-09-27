@@ -264,6 +264,19 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           canSubmit={can(session, "finance.invoice.create")}
           canApprove={can(session, "finance.invoice.approve")}
           canRecordPayment={can(session, "finance.payment.approve")}
+          // What an invoice here will be matched against — the same PO and
+          // GRNs the panels above it show. Passed down rather than re-queried:
+          // both are already loaded for this page.
+          matchBasis={{
+            poNumber: procurementDetail!.po!.po_number,
+            poTotalCents: procurementDetail!.po!.total_cents,
+            orderedQty: procurementDetail!.po!.items.reduce((sum, i) => sum + i.qty, 0),
+            receivedQty: (fulfilmentDetail?.grns ?? []).reduce(
+              (sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0),
+              0,
+            ),
+            grnNumbers: (fulfilmentDetail?.grns ?? []).map((g) => g.grn_number),
+          }}
           emphasize={isCurrentStage(PANEL_STAGE_KEYS.finance, c.current_stage_key)}
         />
       )}

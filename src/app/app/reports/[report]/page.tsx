@@ -608,7 +608,8 @@ export default async function ReportDetailPage({
                     <th className="pb-2 pr-4 font-medium">PR No.</th>
                     <th className="pb-2 pr-4 font-medium">Department</th>
                     <th className="pb-2 pr-4 font-medium">Status</th>
-                    <th className="pb-2 font-medium">Received</th>
+                    <th className="pb-2 pr-4 font-medium">Received</th>
+                    <th className="pb-2 font-medium">Invoiced</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -654,7 +655,22 @@ export default async function ReportDetailPage({
                       <td className="py-2 pr-4">
                         <Badge tone={r.status === "inspected" ? "good" : "neutral"}>{r.status}</Badge>
                       </td>
-                      <td className="py-2 tnum text-ink-soft">{formatDate(r.received_at)}</td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.received_at)}</td>
+                      {/* Where the receipt has got to on the finance side.
+                          Ending this report at the receipt is what made
+                          invoicing look like a separate system. */}
+                      <td className="py-2">
+                        {r.invoice_status ? (
+                          <span className="flex items-center gap-1.5">
+                            <Badge tone={r.invoice_status === "paid" ? "good" : r.invoice_status === "exception" ? "critical" : "info"}>
+                              {r.invoice_status}
+                            </Badge>
+                            <span className="font-mono text-xs text-ink-faint">{r.invoice_number}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-ink-faint">Not yet invoiced</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -672,7 +688,7 @@ export default async function ReportDetailPage({
             {filteredInvoices.length === 0 ? (
               <p className="text-sm text-ink-faint">{invoiceRows.length === 0 ? "No invoices submitted in this period." : "Nothing matches these filters."}</p>
             ) : (
-              <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} canViewDocument={canViewInvoice} />
+              <InvoicesTable rows={filteredInvoices} canPay={can(session, "finance.payment.approve")} canViewDocument={canViewInvoice} canViewPo={canViewPo} />
             )}
             <RecordCount shown={filteredInvoices.length} total={invoiceRows.length} noun="invoice" />
           </CardBody>

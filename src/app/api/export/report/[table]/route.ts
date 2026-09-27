@@ -139,7 +139,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
         const rows = await getGoodsReceivedReport(session.tenant.id, reportPeriod);
         return {
           title: "Goods received",
-          header: ["GRN number", "PO number", "PR No.", "Department", "Status", "Received"],
+          header: ["GRN number", "PO number", "PR No.", "Department", "Status", "Received", "Invoice", "Invoice status"],
           rows: rows
             .filter(
               (r) =>
@@ -147,14 +147,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
                 (!statusFilter || r.status === statusFilter) &&
                 (!deptFilter || (r.department_name ?? "").toLowerCase() === deptFilter),
             )
-            .map((r) => [r.grn_number, r.po_number, r.case_number, r.department_name ?? "—", r.status, r.received_at]),
+            .map((r) => [
+              r.grn_number,
+              r.po_number,
+              r.case_number,
+              r.department_name ?? "—",
+              r.status,
+              r.received_at,
+              r.invoice_number ?? "—",
+              r.invoice_status ?? "not yet invoiced",
+            ]),
         };
       }
       case "invoices": {
         const rows = await getInvoiceReport(session.tenant.id, reportPeriod);
         return {
           title: "Invoices & payments",
-          header: ["Invoice number", "PR No.", "Department", "Supplier", "Status", "Total (KES)", "Due", "Submitted"],
+          header: ["Invoice number", "PO number", "PR No.", "Department", "Supplier", "Status", "Total (KES)", "Due", "Submitted"],
           rows: rows
             .filter(
               (r) =>
@@ -162,7 +171,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
                 (!statusFilter || r.status === statusFilter) &&
                 (!deptFilter || (r.department_name ?? "").toLowerCase() === deptFilter),
             )
-            .map((r) => [r.invoice_number, r.case_number, r.department_name ?? "—", r.supplier_name, r.status, r.total_cents / 100, r.due_date ?? "—", r.submitted_at]),
+            .map((r) => [r.invoice_number, r.po_number ?? "—", r.case_number, r.department_name ?? "—", r.supplier_name, r.status, r.total_cents / 100, r.due_date ?? "—", r.submitted_at]),
         };
       }
     }
