@@ -595,7 +595,32 @@ export default async function ReportDetailPage({
 
       {key === "goods-received" && (
         <Card>
-          <CardHeader title={"Goods received in this period"} />
+          <CardHeader
+            title={"Goods received in this period"}
+            subtitle="Received and not yet invoiced is money already owed — the goods are here and only the paperwork is outstanding."
+            action={
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                <span className="text-ink-soft">
+                  Received:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {formatMoney(filteredGrns.reduce((sum, r) => sum + r.received_value_cents, 0))}
+                  </span>
+                </span>
+                <span className="text-ink-soft">
+                  Not yet invoiced:{" "}
+                  <span className="tnum font-semibold text-attention">
+                    {formatMoney(
+                      filteredGrns.filter((r) => !r.invoice_status).reduce((sum, r) => sum + r.received_value_cents, 0),
+                    )}
+                  </span>
+                  <span className="text-ink-faint">
+                    {" "}
+                    ({filteredGrns.filter((r) => !r.invoice_status).length})
+                  </span>
+                </span>
+              </div>
+            }
+          />
           <CardBody className="overflow-x-auto">
             {filteredGrns.length === 0 ? (
               <p className="text-sm text-ink-faint">{grnRows.length === 0 ? "No goods received in this period." : "Nothing matches these filters."}</p>
@@ -608,6 +633,7 @@ export default async function ReportDetailPage({
                     <th className="pb-2 pr-4 font-medium">PR No.</th>
                     <th className="pb-2 pr-4 font-medium">Department</th>
                     <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Value</th>
                     <th className="pb-2 pr-4 font-medium">Received</th>
                     <th className="pb-2 font-medium">Invoiced</th>
                   </tr>
@@ -655,6 +681,7 @@ export default async function ReportDetailPage({
                       <td className="py-2 pr-4">
                         <Badge tone={r.status === "inspected" ? "good" : "neutral"}>{r.status}</Badge>
                       </td>
+                      <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(r.received_value_cents)}</td>
                       <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.received_at)}</td>
                       {/* Where the receipt has got to on the finance side.
                           Ending this report at the receipt is what made

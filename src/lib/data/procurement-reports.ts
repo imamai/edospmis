@@ -135,6 +135,16 @@ export interface GoodsReceivedReportRow {
    */
   invoice_number: string | null;
   invoice_status: string | null;
+  /**
+   * What this receipt is worth, priced from the purchase order it was
+   * received against — a goods-received note carries quantities but no money.
+   *
+   * Received and not yet invoiced is a liability already incurred: the goods
+   * are ours, the supplier is owed, and only the paperwork is outstanding.
+   * Leaving it out of sight understates what is owed, which is why this is
+   * summed separately below.
+   */
+  received_value_cents: number;
 }
 
 export async function getGoodsReceivedReport(tenantId: string, period?: ReportPeriod): Promise<GoodsReceivedReportRow[]> {
@@ -148,25 +158,47 @@ export async function getGoodsReceivedReport(tenantId: string, period?: ReportPe
   const { data: grns } = await query.order("received_at", { ascending: false });
   if (!grns || grns.length === 0) return [];
 
-  const [caseByIdMap, { data: invoices }] = await Promise.all([
+  const poIds = [...new Set(grns.map((g) => g.po_id))];
+  const [caseByIdMap, { data: invoices }, { data: pos }, { data: grnItems }] = await Promise.all([
     lookupCases(supabase, tenantId, grns.map((g) => g.case_id)),
     // One invoice per purchase order (there is a unique index on po_id), so
     // this is a lookup, not an aggregate.
-    supabase
-      .from("edospmis_invoices")
-      .select("po_id, invoice_number, status")
-      .eq("tenant_id", tenantId)
-      .in("po_id", [...new Set(grns.map((g) => g.po_id))]),
+    supabase.from("edospmis_invoices").select("po_id, invoice_number, status").eq("tenant_id", tenantId).in("po_id", poIds),
+    supabase.from("edospmis_purchase_orders").select("id, items").eq("tenant_id", tenantId).in("id", poIds),
+    supabase.from("edospmis_grn_items").select("grn_id, description, received_qty").in("grn_id", grns.map((g) => g.id)),
   ]);
   const invoiceByPo = new Map((invoices ?? []).map((i) => [i.po_id, i]));
+
+  // A receipt is priced from its order line — matched on description, which
+  // is what the receiving form copies across from the purchase order.
+  const unitCostByPo = new Map<string, Map<string, number>>();
+  for (const po of pos ?? []) {
+    const byDescription = new Map<string, number>();
+    for (const item of (po.items ?? []) as { description: string; estimated_unit_cost_cents: number }[]) {
+      byDescription.set(item.description, item.estimated_unit_cost_cents ?? 0);
+    }
+    unitCostByPo.set(po.id, byDescription);
+  }
+  const itemsByGrn = new Map<string, { description: string; received_qty: number }[]>();
+  for (const item of grnItems ?? []) {
+    const list = itemsByGrn.get(item.grn_id) ?? [];
+    list.push(item);
+    itemsByGrn.set(item.grn_id, list);
+  }
 
   return grns.map((g) => {
     const c = caseByIdMap.get(g.case_id);
     const po = g.edospmis_purchase_orders as unknown as { po_number: string } | null;
     const invoice = invoiceByPo.get(g.po_id);
+    const unitCosts = unitCostByPo.get(g.po_id);
+    const receivedValue = (itemsByGrn.get(g.id) ?? []).reduce(
+      (sum, item) => sum + Math.round(item.received_qty * (unitCosts?.get(item.description) ?? 0)),
+      0,
+    );
     return {
       invoice_number: invoice?.invoice_number ?? null,
       invoice_status: invoice?.status ?? null,
+      received_value_cents: receivedValue,
       grn_id: g.id,
       po_id: g.po_id,
       case_id: g.case_id,

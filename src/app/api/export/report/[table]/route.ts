@@ -139,7 +139,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
         const rows = await getGoodsReceivedReport(session.tenant.id, reportPeriod);
         return {
           title: "Goods received",
-          header: ["GRN number", "PO number", "PR No.", "Department", "Status", "Received", "Invoice", "Invoice status"],
+          header: ["GRN number", "PO number", "PR No.", "Department", "Status", "Value (KES)", "Received", "Invoice", "Invoice status"],
           rows: rows
             .filter(
               (r) =>
@@ -153,6 +153,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
               r.case_number,
               r.department_name ?? "—",
               r.status,
+              r.received_value_cents / 100,
               r.received_at,
               r.invoice_number ?? "—",
               r.invoice_status ?? "not yet invoiced",

@@ -17,6 +17,28 @@ import type { InvoiceReportRow } from "@/lib/data/procurement-reports";
 const PAYABLE_STATUSES = new Set(["approved"]);
 
 /**
+ * How overdue an invoice is, in whole days — negative while it is still
+ * within terms.
+ *
+ * Payables are worked by due date, not by the order they arrived in: paying
+ * late costs the supplier relationship and sometimes a penalty, paying early
+ * costs working capital for no gain. The report showed a due date and nothing
+ * else, so neither could be seen at a glance.
+ */
+function daysOverdue(dueDate: string | null, today: Date): number | null {
+  if (!dueDate) return null;
+  const due = new Date(`${dueDate}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  return Math.floor((today.getTime() - due.getTime()) / 86_400_000);
+}
+
+const AGE_BANDS = [
+  { label: "Overdue 60+ days", min: 60 },
+  { label: "Overdue 31–60 days", min: 31 },
+  { label: "Overdue 1–30 days", min: 1 },
+] as const;
+
+/**
  * The one deliberate exception to reports staying read-only (see the
  * write-up shared with the user first): a batch "pay several invoices at
  * once" action, so a Finance user isn't forced to open each case
@@ -45,6 +67,17 @@ export function InvoicesTable({
   const [pending, startTransition] = useTransition();
 
   const payableRows = useMemo(() => rows.filter((r) => PAYABLE_STATUSES.has(r.status)), [rows]);
+
+  // Fixed once per render rather than read per row, so every age on screen is
+  // measured from the same moment.
+  const today = useMemo(() => new Date(new Date().toDateString()), []);
+  const overdueRows = payableRows.filter((r) => (daysOverdue(r.due_date, today) ?? -1) >= 1);
+  const overdueTotal = overdueRows.reduce((sum, r) => sum + r.total_cents, 0);
+  const dueSoonRows = payableRows.filter((r) => {
+    const age = daysOverdue(r.due_date, today);
+    return age !== null && age < 1 && age >= -7;
+  });
+  const undated = payableRows.filter((r) => !r.due_date).length;
   const payableTotal = payableRows.reduce((sum, r) => sum + r.total_cents, 0);
   const paidTotal = rows.filter((r) => r.status === "paid").reduce((sum, r) => sum + r.total_cents, 0);
 
@@ -140,6 +173,56 @@ export function InvoicesTable({
                 Select all {payableRows.length} payable
               </button>
             </>
+          )}
+        </div>
+      )}
+
+      {payableRows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-surface px-3 py-2.5 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Payables by age</span>
+          {overdueRows.length > 0 ? (
+            AGE_BANDS.map((band, i) => {
+              const upper = i === 0 ? Infinity : AGE_BANDS[i - 1].min - 1;
+              const inBand = overdueRows.filter((r) => {
+                const age = daysOverdue(r.due_date, today) ?? 0;
+                return age >= band.min && age <= upper;
+              });
+              if (inBand.length === 0) return null;
+              return (
+                <span key={band.label} className="text-ink-soft">
+                  {band.label}:{" "}
+                  <span className="tnum font-semibold text-critical">
+                    {formatMoney(inBand.reduce((sum, r) => sum + r.total_cents, 0))}
+                  </span>
+                  <span className="text-ink-faint"> ({inBand.length})</span>
+                </span>
+              );
+            })
+          ) : (
+            <span className="text-ink-soft">Nothing overdue</span>
+          )}
+          {dueSoonRows.length > 0 && (
+            <span className="text-ink-soft">
+              Due within 7 days:{" "}
+              <span className="tnum font-semibold text-attention">
+                {formatMoney(dueSoonRows.reduce((sum, r) => sum + r.total_cents, 0))}
+              </span>
+              <span className="text-ink-faint"> ({dueSoonRows.length})</span>
+            </span>
+          )}
+          {undated > 0 && (
+            <span className="text-ink-faint">
+              {undated} without a due date — these cannot be aged
+            </span>
+          )}
+          {canPay && overdueRows.length > 0 && selected.size === 0 && (
+            <button
+              type="button"
+              onClick={() => setSelected(new Set(overdueRows.map((r) => r.invoice_id)))}
+              className="ml-auto text-xs font-semibold text-brand hover:underline"
+            >
+              Select the {overdueRows.length} overdue ({formatMoney(overdueTotal)})
+            </button>
           )}
         </div>
       )}
@@ -252,7 +335,29 @@ export function InvoicesTable({
                     </Badge>
                   </td>
                   <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(r.total_cents, { currency: r.currency })}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{r.due_date ? formatDate(r.due_date) : "—"}</td>
+                  <td className="py-2 pr-4 text-ink-soft">
+                    {r.due_date ? (
+                      <span className="flex flex-col">
+                        <span>{formatDate(r.due_date)}</span>
+                        {payable &&
+                          (() => {
+                            const age = daysOverdue(r.due_date, today);
+                            if (age === null) return null;
+                            if (age >= 1)
+                              return (
+                                <span className="text-xs font-semibold text-critical">
+                                  {age} day{age === 1 ? "" : "s"} overdue
+                                </span>
+                              );
+                            if (age >= -7)
+                              return <span className="text-xs font-semibold text-attention">due in {-age} days</span>;
+                            return null;
+                          })()}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.submitted_at)}</td>
                   <td className="py-2 text-right">
                     {canViewDocument && (

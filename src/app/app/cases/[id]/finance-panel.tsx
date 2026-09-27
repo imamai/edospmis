@@ -184,6 +184,7 @@ export function FinancePanel({
   }
 
   const resolvingException = invoice?.exceptions.find((ex) => ex.id === resolvingId);
+  const receiptRecorded = matchBasis.grnNumbers.length > 0;
 
   return (
     <Card raised={emphasize}>
@@ -198,7 +199,16 @@ export function FinancePanel({
           <MatchBasisNote basis={matchBasis} currency={currency} />
         )}
 
-        {!invoice && canSubmit && (
+        {/* The receipt comes first, so the step isn't offered before it can
+            succeed — edospmis_submit_invoice refuses it outright. */}
+        {!invoice && canSubmit && !receiptRecorded && (
+          <p className="text-sm text-ink-faint">
+            Record the goods received above before entering the supplier&rsquo;s invoice — the invoice is matched against the
+            receipt, not against the order alone.
+          </p>
+        )}
+
+        {!invoice && canSubmit && receiptRecorded && (
           <>
             <Button size="sm" variant="secondary" onClick={() => setSubmitting(true)}>
               Submit invoice
