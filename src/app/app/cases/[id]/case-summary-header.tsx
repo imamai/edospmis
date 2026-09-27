@@ -8,20 +8,22 @@ export function CaseSummaryHeader({
   requesterName,
   amountCents,
   currency,
-  openedAt,
   status,
   statusTone,
+  daysOpen,
 }: {
   caseNumber: string;
   title: string;
   requesterName: string | null;
   amountCents: number;
   currency: string;
-  openedAt: string;
   status: CaseStatus;
   statusTone: Tone;
+  /** Computed by the page, not here: reading the clock while rendering gives a
+   * value that differs between the server render and the client's, which is a
+   * hydration mismatch waiting to happen the moment this becomes interactive. */
+  daysOpen: number;
 }) {
-  const daysOpen = Math.max(0, Math.round((Date.now() - new Date(openedAt).getTime()) / 86400000));
 
   return (
     <div className="sticky top-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur-sm sm:-mx-6 sm:px-6">

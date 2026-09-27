@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { isSafeLogoUrl } from "@/lib/safe-url";
 import type { TenantBranding } from "@/lib/database.types";
 
 export interface OrganizationFormState {
@@ -53,6 +54,13 @@ export async function setTenantLogo(logoUrl: string | null): Promise<{ error: st
   const session = await requireSession();
   if (!can(session, "admin.org.manage")) {
     return { error: "You don't have permission to manage the organization profile." };
+  }
+
+  // Checked here as well as at the point of fetching: a value that can never
+  // be stored is a smaller problem than one that is stored and has to be
+  // refused every time it is read.
+  if (!isSafeLogoUrl(logoUrl)) {
+    return { error: "That logo URL isn't one this workspace uploaded." };
   }
 
   const branding: TenantBranding = { ...session.tenant.branding, logo_url: logoUrl };

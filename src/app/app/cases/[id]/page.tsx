@@ -72,7 +72,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         requesterName={requesterName}
         amountCents={pr.estimated_cost_cents}
         currency={pr.currency}
-        openedAt={c.opened_at}
+        daysOpen={detail.daysOpen}
         status={c.status}
         statusTone={STAGE_TONE[c.status] ?? "neutral"}
       />

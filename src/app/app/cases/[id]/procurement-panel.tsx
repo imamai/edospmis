@@ -75,11 +75,12 @@ export function ProcurementPanel({
   const [approvePending, startApprovePO] = useTransition();
   const [approveError, setApproveError] = useState<string | null>(null);
 
+  // A recorded quotation closes the dialog — derived, not stored, so the
+  // success does not need a second render to take effect.
+  const quoteDialogOpen = recordingQuote && !quoteState.ok;
+
   useEffect(() => {
-    if (quoteState.ok) {
-      setRecordingQuote(false);
-      router.refresh();
-    }
+    if (quoteState.ok) router.refresh();
   }, [quoteState.ok, router]);
 
   function invite(supplierId: string) {
@@ -305,7 +306,7 @@ export function ProcurementPanel({
             <Button size="sm" variant="secondary" onClick={() => setRecordingQuote(true)}>
               Record a quotation
             </Button>
-            <Modal open={recordingQuote} onClose={() => setRecordingQuote(false)} title="Record a quotation" dismissible={!quotePending} size="sm">
+            <Modal open={quoteDialogOpen} onClose={() => setRecordingQuote(false)} title="Record a quotation" dismissible={!quotePending} size="sm">
               <form action={quoteAction} className="flex flex-col gap-3">
                 <input type="hidden" name="rfq_id" value={rfq.id} />
                 <input type="hidden" name="case_id" value={rfq.case_id} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,19 +32,26 @@ export function Modal({
   size?: keyof typeof SIZES;
   dismissible?: boolean;
 }) {
-  const [mounted, setMounted] = useState(false);
+  // "Have we hydrated yet" — a portal needs document.body, which does not
+  // exist during the server render. useSyncExternalStore answers that without
+  // a render-then-setState round trip: server snapshot false, client true.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
     returnFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
-    first?.focus();
+    // Focus the panel rather than its first control, so a screen reader
+    // announces the dialog's title before whatever field happens to be first.
+    panel?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape" && dismissible) {
@@ -68,7 +75,7 @@ export function Modal({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
       returnFocusRef.current?.focus();
     };
   }, [open, dismissible, onClose]);
@@ -76,7 +83,7 @@ export function Modal({
   if (!mounted || !open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
         className="absolute inset-0 bg-ink/40 transition-opacity"
         onClick={() => dismissible && onClose()}
@@ -88,9 +95,12 @@ export function Modal({
         aria-modal="true"
         aria-label={typeof title === "string" ? title : undefined}
         onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
         className={cn(
-          "relative w-full rounded-xl border border-line bg-surface shadow-raised transition-all",
-          "max-h-[90vh] overflow-y-auto",
+          "relative w-full border border-line bg-surface shadow-raised outline-none transition-all",
+          // On a phone it rises from the bottom edge, which is where a thumb
+          // is; from sm: up it is a centred dialog as before.
+          "max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl",
           SIZES[size],
         )}
       >

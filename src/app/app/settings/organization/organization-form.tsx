@@ -55,7 +55,7 @@ export function OrganizationForm({ tenant }: { tenant: Tenant }) {
           />
           <span className="tnum text-sm text-ink-faint">{accentColor}</span>
         </div>
-        <p className="text-xs text-ink-faint">Tints buttons and links across the app. The sidebar stays EDOSPMIS's navy.</p>
+        <p className="text-xs text-ink-faint">Tints buttons and links across the app. The sidebar stays EDOSPMIS&rsquo;s navy.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

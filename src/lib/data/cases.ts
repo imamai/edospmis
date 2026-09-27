@@ -112,6 +112,13 @@ export interface CaseDetail {
   clientName: string | null;
   requesterName: string | null;
   pendingTaskDueAt: string | null;
+  /** Whole days since the case was opened.
+   *
+   * Computed here, while loading, rather than in the component that shows it.
+   * Reading the clock during render makes a value that differs between the
+   * server's render and the browser's — a hydration mismatch — and it is not
+   * the view's job to derive it either way. */
+  daysOpen: number;
 }
 
 export async function getCaseDetail(tenantId: string, caseId: string): Promise<CaseDetail | null> {
@@ -123,6 +130,8 @@ export async function getCaseDetail(tenantId: string, caseId: string): Promise<C
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!caseRow) return null;
+
+  const daysOpen = Math.max(0, Math.round((Date.now() - new Date(caseRow.opened_at as string).getTime()) / 86_400_000));
 
   const { data: pr } = await supabase.from("edospmis_prs").select("*").eq("case_id", caseId).maybeSingle();
   if (!pr) return null;
@@ -172,6 +181,7 @@ export async function getCaseDetail(tenantId: string, caseId: string): Promise<C
     clientName: client?.name ?? null,
     requesterName: requester?.full_name ?? requester?.email ?? null,
     pendingTaskDueAt: pendingTask?.due_at ?? null,
+    daysOpen,
   };
 }
 

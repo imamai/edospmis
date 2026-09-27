@@ -1,7 +1,6 @@
 import { requireSession, can } from "@/lib/data/session";
 import { getRequisitionStageCounts, OPEN_STATUSES } from "@/lib/data/requisitions";
 import { SidebarNav } from "@/components/app/sidebar-nav";
-import { MobileNav } from "@/components/app/mobile-nav";
 import { ServiceWorkerRegister } from "@/components/app/sw-register";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,12 +29,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // once inside their workspace.
   const accent = session.tenant.branding.accent_color;
 
+  // SidebarNav renders both shells itself — the rail from md: up, and the
+  // phone bar plus drawer below it — so the layout no longer has to know
+  // which one applies at which width.
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
       <ServiceWorkerRegister />
       <SidebarNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} counts={counts} />
       <div className="flex min-w-0 flex-1 flex-col" style={accent ? ({ "--color-brand": accent } as React.CSSProperties) : undefined}>
-        <MobileNav tenantName={session.tenant.name} permissions={permissions} isPlatformAdmin={session.isPlatformAdmin} counts={counts} />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>

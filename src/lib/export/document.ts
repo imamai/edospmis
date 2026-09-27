@@ -1,6 +1,7 @@
 import "server-only";
 
 import { jsPDF } from "jspdf";
+import { safeLogoUrl } from "@/lib/safe-url";
 import { latin } from "./table";
 
 /**
@@ -82,9 +83,13 @@ function file(body: Uint8Array, filename: string): Response {
  * logo should degrade to the text-only letterhead, not break the PDF.
  */
 export async function fetchLogoDataUrl(url: string | null | undefined): Promise<string | null> {
-  if (!url) return null;
+  // Only a URL this application produced, on its own storage host. Without
+  // this the logo field decides what the server fetches, which is a
+  // server-side request forgery — see lib/safe-url.ts.
+  const safe = safeLogoUrl(url);
+  if (!safe) return null;
   try {
-    const res = await fetch(url);
+    const res = await fetch(safe, { redirect: "error" });
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.startsWith("image/png") && !contentType.startsWith("image/jpeg")) return null;

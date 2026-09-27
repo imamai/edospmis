@@ -29,11 +29,13 @@ export function ApprovalPanel({
   const [state, action, pending] = useActionState(decideApproval, initial);
   const [decision, setDecision] = useState<"approved" | "rejected" | "returned" | null>(null);
 
+  // A successful decision closes the dialog. Derived rather than stored, so
+  // there is no second render that has to un-set it — the old version cleared
+  // this from inside an effect, which is a cascading render.
+  const openDecision = state.ok ? null : decision;
+
   useEffect(() => {
-    if (state.ok) {
-      setDecision(null);
-      router.refresh();
-    }
+    if (state.ok) router.refresh();
   }, [state.ok, router]);
 
   return (
@@ -53,26 +55,26 @@ export function ApprovalPanel({
         </div>
 
         <Modal
-          open={decision !== null}
+          open={openDecision !== null}
           onClose={() => setDecision(null)}
-          title={decision ? DECISION_TITLE[decision] : ""}
+          title={openDecision ? DECISION_TITLE[openDecision] : ""}
           dismissible={!pending}
           size="sm"
         >
           <form action={action} className="flex flex-col gap-3">
             <input type="hidden" name="approval_id" value={approvalId} />
             <input type="hidden" name="case_id" value={caseId} />
-            <input type="hidden" name="decision" value={decision ?? ""} />
+            <input type="hidden" name="decision" value={openDecision ?? ""} />
 
-            {(decision === "rejected" || decision === "returned") && (
+            {(openDecision === "rejected" || openDecision === "returned") && (
               <TextArea
-                label={decision === "rejected" ? "Why is this being rejected?" : "What needs correcting?"}
+                label={openDecision === "rejected" ? "Why is this being rejected?" : "What needs correcting?"}
                 name="comment"
                 required
                 autoFocus
               />
             )}
-            {decision === "approved" && <TextArea label="Comment" name="comment" hint="Optional" />}
+            {openDecision === "approved" && <TextArea label="Comment" name="comment" hint="Optional" />}
 
             {state.error && (
               <p role="alert" className="text-xs text-critical">
@@ -82,9 +84,9 @@ export function ApprovalPanel({
 
             <ModalFormActions
               onCancel={() => setDecision(null)}
-              submitLabel={`Confirm ${decision === "approved" ? "approval" : decision === "rejected" ? "rejection" : "return"}`}
+              submitLabel={`Confirm ${openDecision === "approved" ? "approval" : openDecision === "rejected" ? "rejection" : "return"}`}
               busy={pending}
-              danger={decision === "rejected"}
+              danger={openDecision === "rejected"}
             />
           </form>
         </Modal>
