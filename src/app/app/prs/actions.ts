@@ -65,6 +65,15 @@ export async function createPR(_prev: PRFormState, form: FormData): Promise<PRFo
   const requiredBy = String(form.get("required_by") ?? "") || null;
   const priority = (String(form.get("priority") ?? "normal") as Priority) || "normal";
   const items = parseItems(form);
+  // Only the deepest level is submitted; the trigger from migration 0044
+  // derives the branch and business unit, so these two can never disagree
+  // with the ancestors stored beside them.
+  const teamId = String(form.get("team_id") ?? "") || null;
+  const departmentId = String(form.get("department_id") ?? "") || null;
+  const budgetId = String(form.get("budget_id") ?? "") || null;
+  // Only meaningful alongside a budget, and only when the form decided the
+  // request exceeded it — an override with no line to override is noise.
+  const overrideReason = budgetId ? String(form.get("budget_override_reason") ?? "").trim() || null : null;
   if (!title) return { error: "Give the request a title.", ok: null };
 
   const estimatedCostCents = items.reduce((sum, i) => sum + i.qty * i.estimated_unit_cost_cents, 0);
@@ -101,6 +110,10 @@ export async function createPR(_prev: PRFormState, form: FormData): Promise<PRFo
     title,
     justification,
     items,
+    team_id: teamId,
+    department_id: teamId ? null : departmentId,
+    budget_id: budgetId,
+    budget_override_reason: overrideReason,
     estimated_cost_cents: estimatedCostCents,
     required_by: requiredBy,
     priority,

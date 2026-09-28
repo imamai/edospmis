@@ -9,6 +9,19 @@ export interface SendEmailInput {
   to: string;
   subject: string;
   html: string;
+  /**
+   * Plain-text alternative. Optional, because the notifications this module
+   * was written for are HTML-only — but worth sending where it exists: some
+   * clients show only the text part, and a message without one scores worse
+   * with spam filters, which matters most for the auth mail a person has
+   * never received from us before.
+   */
+  text?: string;
+}
+
+/** Whether this deployment can send at all, without attempting a send to find out. */
+export function canSendEmail(): boolean {
+  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
 }
 
 export interface SendEmailResult {
@@ -29,7 +42,13 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to: input.to, subject: input.subject, html: input.html }),
+    body: JSON.stringify({
+      from,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      ...(input.text ? { text: input.text } : {}),
+    }),
   });
 
   if (!res.ok) {

@@ -3,10 +3,12 @@ import { AlertTriangle, ClipboardList, Inbox, Plus, TriangleAlert, Wallet } from
 import { requireSession, can } from "@/lib/data/session";
 import { getMyWork } from "@/lib/data/cases";
 import { getAnalytics } from "@/lib/data/analytics";
+import { getCycleSummary } from "@/lib/data/procurement-reports";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
+import { CycleTimeCard } from "@/components/app/cycle-time-card";
 import { formatMoney, slaStatus } from "@/lib/utils";
 
 export default async function HomePage() {
@@ -17,9 +19,13 @@ export default async function HomePage() {
 
   const roleIds = session.roles.map((r) => r.id);
   const canSeeReports = can(session, "reports.view");
-  const [myWork, analytics] = await Promise.all([
+  // The cycle summary is bounded to a recent window and skipped entirely for
+  // somebody who cannot see reports, so it costs nothing on a requester's
+  // dashboard.
+  const [myWork, analytics, cycle] = await Promise.all([
     getMyWork(session.tenant.id, roleIds),
     canSeeReports ? getAnalytics(session.tenant.id) : Promise.resolve(null),
+    canSeeReports ? getCycleSummary(session.tenant.id) : Promise.resolve(null),
   ]);
 
   return (
@@ -66,6 +72,8 @@ export default async function HomePage() {
           />
         </div>
       )}
+
+      {cycle && <CycleTimeCard summary={cycle} />}
 
       <Card>
         <CardHeader title="My Work" subtitle="Requests and approvals assigned to you" icon={<ClipboardList className="h-4 w-4" />} />

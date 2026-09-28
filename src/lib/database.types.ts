@@ -113,6 +113,31 @@ export interface MemberRow {
   full_name: string | null;
   status: MembershipStatus;
   roles: { id: string; name: string }[];
+  placement: Placement;
+}
+
+/**
+ * Where something sits in the organisation: business unit → branch →
+ * department → team.
+ *
+ * Stored in full on the row rather than climbed on read, and kept honest by
+ * the `edospmis_normalise_placement` trigger (migration 0044), which derives
+ * the ancestors from whichever level is deepest. Every level is optional —
+ * a person can be placed at a business unit and no further.
+ */
+export interface Placement {
+  business_unit_id: string | null;
+  branch_id: string | null;
+  department_id: string | null;
+  team_id: string | null;
+}
+
+/** The four lists a placement is chosen from, fetched once and cascaded client-side. */
+export interface PlacementOptions {
+  businessUnits: BusinessUnit[];
+  branches: Branch[];
+  departments: Department[];
+  teams: Team[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -246,7 +271,14 @@ export interface PR {
   requester_id: string;
   category_id: string | null;
   client_id: string | null;
+  /** Where in the organisation this was raised — see Placement. */
+  business_unit_id: string | null;
+  branch_id: string | null;
   department_id: string | null;
+  team_id: string | null;
+  /** The line this is to be met from, and why it was raised over it. */
+  budget_id: string | null;
+  budget_override_reason: string | null;
   title: string;
   justification: string | null;
   items: PRItem[];
@@ -322,7 +354,7 @@ export interface MyWorkItem {
  * ------------------------------------------------------------------ */
 
 export type RfqStatus = "open" | "closed" | "cancelled";
-export type POStatus = "pending_approval" | "issued" | "cancelled";
+export type POStatus = "pending_approval" | "issued" | "closed" | "cancelled";
 
 export interface Supplier {
   id: string;
@@ -411,6 +443,8 @@ export interface PurchaseOrder {
   currency: string;
   status: POStatus;
   expected_delivery_date: string | null;
+  approved_at: string | null;
+  closed_at: string | null;
   issued_by: string | null;
   issued_at: string;
   created_at: string;

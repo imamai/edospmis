@@ -1,5 +1,6 @@
 import { requireSession, can } from "@/lib/data/session";
-import { getCategories, getClients } from "@/lib/data/reference";
+import { getCategories, getClients, getPlacementOptions, getMyPlacement } from "@/lib/data/reference";
+import { getBudgetChoices } from "@/lib/data/budgets";
 import { modelAvailable } from "@/lib/ai/suggest";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PRForm } from "./pr-form";
@@ -14,9 +15,12 @@ export default async function NewPRPage() {
     );
   }
 
-  const [categories, clients] = await Promise.all([
+  const [categories, clients, budgets, placementOptions, myPlacement] = await Promise.all([
     getCategories(session.tenant.id),
     getClients(session.tenant.id),
+    getBudgetChoices(session.tenant.id),
+    getPlacementOptions(session.tenant.id),
+    getMyPlacement(session.tenant.id, session.user.id),
   ]);
 
   return (
@@ -28,7 +32,14 @@ export default async function NewPRPage() {
       <Card>
         <CardHeader title="Purchase requisition" />
         <CardBody>
-          <PRForm categories={categories} clients={clients} aiAvailable={modelAvailable()} />
+          <PRForm
+            categories={categories}
+            clients={clients}
+            budgets={budgets}
+            placementOptions={placementOptions}
+            myPlacement={myPlacement}
+            aiAvailable={modelAvailable()}
+          />
         </CardBody>
       </Card>
     </div>

@@ -15,7 +15,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import type { Category, Client, Priority } from "@/lib/database.types";
+import { PlacementPicker } from "@/components/app/placement-picker";
+import { BudgetField } from "./budget-field";
+import type { BudgetChoice } from "@/lib/data/budgets";
+import type { Category, Client, Placement, PlacementOptions, Priority } from "@/lib/database.types";
 
 const initial: PRFormState = { error: null, ok: null };
 const initialDuplicates: DuplicateCheckState = { error: null, matches: null };
@@ -31,10 +34,17 @@ interface ItemRow {
 export function PRForm({
   categories,
   clients,
+  budgets,
+  placementOptions,
+  myPlacement,
   aiAvailable,
 }: {
   categories: Category[];
   clients: Client[];
+  budgets: BudgetChoice[];
+  placementOptions: PlacementOptions;
+  /** Defaulted from the requester's own placement — most requests are for their own department. */
+  myPlacement: Placement | null;
   aiAvailable: boolean;
 }) {
   const [state, action, pending] = useActionState(createPR, initial);
@@ -44,6 +54,30 @@ export function PRForm({
 
   const [categoryId, setCategoryId] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
+  const [estimatedCents, setEstimatedCents] = useState(0);
+
+  /**
+   * The running total of the item lines, so the budget balance moves while
+   * somebody is still typing rather than after an approver bounces it back.
+   *
+   * Read off the DOM on input rather than by making every quantity and cost a
+   * controlled field: the rows are added and removed dynamically, and turning
+   * them into state would rebuild the whole item editor to show one number.
+   */
+  function recalcEstimate() {
+    const form = formRef.current;
+    if (!form) return;
+    const qtys = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="item_qty"]'));
+    const costs = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="item_cost"]'));
+    let total = 0;
+    qtys.forEach((qtyInput, i) => {
+      const qty = Number(qtyInput.value);
+      const cost = Number(costs[i]?.value);
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(cost) || cost <= 0) return;
+      total += Math.round(qty * cost * 100);
+    });
+    setEstimatedCents(total);
+  }
 
   const [duplicates, setDuplicates] = useState<DuplicateCheckState>(initialDuplicates);
   const [checkingDuplicates, startDuplicateCheck] = useTransition();
@@ -82,7 +116,7 @@ export function PRForm({
   }
 
   return (
-    <form ref={formRef} action={action} className="flex flex-col gap-5">
+    <form ref={formRef} action={action} onInput={recalcEstimate} className="flex flex-col gap-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <TextInput label="Title" name="title" required placeholder="e.g. Office laptops — Finance team" />
@@ -143,8 +177,19 @@ export function PRForm({
         </div>
       )}
 
+      <div className="rounded-lg border border-line bg-surface-sunk p-3.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Who is asking</p>
+        <p className="mt-0.5 mb-3 text-xs text-ink-faint">
+          Defaulted to where you sit. Change it if you are raising this on behalf of another part of
+          the organisation — every departmental report reads from this.
+        </p>
+        <PlacementPicker options={placementOptions} value={myPlacement} />
+      </div>
+
+      <BudgetField budgets={budgets} estimatedCents={estimatedCents} />
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <SelectInput label="Client" name="client_id" hint="Optional">
+        <SelectInput label="Client" name="client_id" hint="Who this is being procured for — optional">
           <option value="">Not set</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>

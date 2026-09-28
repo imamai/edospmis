@@ -4,6 +4,7 @@ import {
   Building,
   Building2,
   ClipboardList,
+  CreditCard,
   FileSearch,
   FileSignature,
   Gauge,
@@ -28,6 +29,7 @@ import {
   UserCog,
   Users,
   UsersRound,
+  Wallet,
   Webhook,
 } from "lucide-react";
 
@@ -99,7 +101,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/app/settings/departments", label: "Departments", icon: Building, requires: "admin.org.manage" },
       { href: "/app/settings/teams", label: "Teams", icon: UsersRound, requires: "admin.org.manage" },
       { href: "/app/settings/queues", label: "Queues", icon: ListOrdered, requires: "admin.workflows.manage" },
+      { href: "/app/settings/budgets", label: "Budgets", icon: Wallet, requires: "admin.org.manage" },
       { href: "/app/settings/organization", label: "Organization Profile", icon: Settings2, requires: "admin.org.manage" },
+      { href: "/app/settings/billing", label: "Billing & plan", icon: CreditCard, requires: "admin.org.manage" },
     ],
   },
   {

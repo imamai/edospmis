@@ -1,12 +1,14 @@
 import { documentError } from "@/lib/export/document";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics } from "@/lib/data/analytics";
-import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
+import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport, getCycleTimeReport } from "@/lib/data/procurement-reports";
 import { resolvePeriod } from "@/lib/report-period";
 import { tableResponse, formatOf, type Cell } from "@/lib/export/table";
-import { STAGE_LABEL } from "@/lib/stage-labels";
+import { STAGE_LABEL, PO_STATUS_LABEL } from "@/lib/stage-labels";
+import { deliveryState, overdueDays } from "@/lib/cycle-time";
 
 const TABLES = [
+  "cycle-time",
   "stage-durations",
   "sla-compliance",
   "supplier-performance",
@@ -47,13 +49,74 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
   const stageFilter = url.searchParams.get("stage") ?? "";
   const deptFilter = (url.searchParams.get("dept") ?? "").trim().toLowerCase();
 
-  const NEW_TABLES = ["rfqs", "purchase-orders", "goods-received", "invoices"] as const;
+  const NEW_TABLES = ["rfqs", "purchase-orders", "goods-received", "invoices", "cycle-time"] as const;
   const isNewTable = (NEW_TABLES as readonly string[]).includes(table);
   const data = isNewTable ? null : await getAnalytics(session.tenant.id, { from: period.from, to: period.to });
   const reportPeriod = { from: period.from, to: period.to };
 
   const built: { title: string; header: string[]; rows: Cell[][] } = await (async () => {
     switch (table) {
+      case "cycle-time": {
+        const rows = await getCycleTimeReport(session.tenant.id, reportPeriod);
+        return {
+          title: "Procure-to-receive cycle time",
+          // The day gaps go out as plain numbers, not "2.4 d" — a spreadsheet
+          // that gets text in a numeric column cannot average it, which is
+          // the first thing anyone does with this report.
+          header: [
+            "PR No.",
+            "Department",
+            "Stage",
+            "PR Created on",
+            "PR Approved on",
+            "Days from PR Creation to PR Approval",
+            "PO Date",
+            "Days from PR Creation to PO Creation",
+            "PO Approved on",
+            "Days from PO Creation to PO Approval",
+            "PO Generated On",
+            "PO No.",
+            "Expected Delivery",
+            "GRPO Date",
+            "GRPO No.",
+            "Days from PO Approval to GRPO",
+            "Delivery Variance (days)",
+            "PO Closed on",
+          ],
+          rows: rows
+            .filter(
+              (r) =>
+                (!q ||
+                  r.case_number.toLowerCase().includes(q) ||
+                  r.title.toLowerCase().includes(q) ||
+                  (r.po_number ?? "").toLowerCase().includes(q)) &&
+                (!statusFilter || r.status === statusFilter) &&
+                (!deptFilter || (r.department_name ?? "").toLowerCase() === deptFilter),
+            )
+            .map((r) => [
+              r.case_number,
+              r.department_name ?? "—",
+              STAGE_LABEL[r.status] ?? r.status,
+              r.pr_created_at,
+              r.pr_approved_at ?? "",
+              r.days_pr_to_pr_approval ?? "",
+              r.po_date ?? "",
+              r.days_pr_to_po ?? "",
+              r.po_approved_at ?? "",
+              r.days_po_to_po_approval ?? "",
+              r.po_created_at ?? "",
+              r.po_number ?? "",
+              r.expected_delivery_date ?? "",
+              r.grn_date ?? "",
+              r.grn_number ?? "",
+              r.days_po_approval_to_grn ?? "",
+              // A number, not "3 days late" — a column of text cannot be
+              // averaged, and averaging it is the first thing anyone does.
+              r.delivery_variance_days ?? "",
+              r.po_closed_at ?? "",
+            ]),
+        };
+      }
       case "stage-durations":
         return {
           title: "Time in each stage",
@@ -124,7 +187,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
         const rows = await getPurchaseOrderReport(session.tenant.id, reportPeriod);
         return {
           title: "Purchase orders",
-          header: ["PO number", "PR No.", "Department", "Supplier", "Status", "Total (KES)", "Billed (KES)", "Still to come (KES)", "Issued"],
+          header: [
+            "PO number",
+            "PR No.",
+            "Department",
+            "Supplier",
+            "Status",
+            "Total (KES)",
+            "Billed (KES)",
+            "Still to come (KES)",
+            "Issued",
+            "Expected delivery",
+            "First received",
+            "Delivery variance (days)",
+            "Days overdue",
+          ],
           rows: rows
             .filter(
               (r) =>
@@ -132,7 +209,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ table: s
                 (!statusFilter || r.status === statusFilter) &&
                 (!deptFilter || (r.department_name ?? "").toLowerCase() === deptFilter),
             )
-            .map((r) => [r.po_number, r.case_number, r.department_name ?? "—", r.supplier_name, r.status, r.total_cents / 100, r.invoiced_net_cents / 100, Math.max(0, r.total_cents - r.invoiced_net_cents) / 100, r.issued_at]),
+            .map((r) => [
+              r.po_number,
+              r.case_number,
+              r.department_name ?? "—",
+              r.supplier_name,
+              PO_STATUS_LABEL[r.status] ?? r.status,
+              r.total_cents / 100,
+              r.invoiced_net_cents / 100,
+              Math.max(0, r.total_cents - r.invoiced_net_cents) / 100,
+              r.issued_at,
+              r.expected_delivery_date ?? "",
+              r.first_received_at ?? "",
+              r.delivery_variance_days ?? "",
+              deliveryState(r.expected_delivery_date, r.first_received_at) === "overdue"
+                ? (overdueDays(r.expected_delivery_date, r.first_received_at) ?? "")
+                : "",
+            ]),
         };
       }
       case "goods-received": {

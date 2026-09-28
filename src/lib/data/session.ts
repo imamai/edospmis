@@ -112,6 +112,16 @@ export function can(session: SessionContext, permissionKey: string): boolean {
 /** Redirects unauthenticated visitors to /login; use at the top of a protected page/layout. */
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSession();
-  if (!session) redirect("/login");
-  return session;
+  if (session) return session;
+
+  // `getSession` answers null for two different people: a visitor with no
+  // session at all, and a signed-in account that belongs to no workspace yet
+  // — an invitation never activated, or provisioning that failed. Sending the
+  // second one to /login loops, because signing in works and lands them back
+  // here. /new-workspace is the only screen that can end that.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  redirect(user ? "/new-workspace" : "/login");
 }

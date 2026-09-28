@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics, getStageCases } from "@/lib/data/analytics";
-import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport } from "@/lib/data/procurement-reports";
+import { getRfqReport, getPurchaseOrderReport, getGoodsReceivedReport, getInvoiceReport, getCycleTimeReport } from "@/lib/data/procurement-reports";
+import { averageGap, dayGapLabel, deliveryState, deliveryVariance, deliveryVarianceLabel, overdueDays } from "@/lib/cycle-time";
 import { getSuppliers } from "@/lib/data/procurement";
 import { resolvePeriod } from "@/lib/report-period";
 import { REPORT_FILTERS } from "@/lib/report-filters";
@@ -11,7 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RecordCount } from "@/components/ui/filter-card";
 import { ReportFilterForm } from "./report-filter-form";
-import { STAGE_LABEL, isTerminalStage } from "@/lib/stage-labels";
+import { STAGE_LABEL, STAGE_TONE, PO_STATUS_LABEL, PO_STATUS_TONE, isTerminalStage } from "@/lib/stage-labels";
 import { formatMoney, formatDate } from "@/lib/utils";
 import { InvoicesTable } from "../invoices-table";
 import { PdfLinkButton } from "@/components/ui/pdf-link-button";
@@ -19,6 +20,7 @@ import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 const REPORTS = {
   aging: { title: "Open requests by age", subtitle: "Every case still open, oldest first" },
   "stage-durations": { title: "Time in each stage", subtitle: "Average time spent, and how many cases are sitting there right now" },
+  "cycle-time": { title: "Procure-to-receive cycle time", subtitle: "Every request from raised to goods received, and the days spent waiting at each gate" },
   "sla-compliance": { title: "Approval SLA compliance", subtitle: "Completed approvals against their SLA target" },
   "supplier-performance": { title: "Supplier performance", subtitle: "Spend, acceptance rate and lead time per supplier" },
   "spend-by-category": { title: "Spend by category", subtitle: "Estimated cost of every request, grouped by category" },
@@ -32,6 +34,39 @@ const PROCUREMENT_REPORT_KEYS = ["rfqs", "purchase-orders", "goods-received", "i
 type ProcurementReportKey = (typeof PROCUREMENT_REPORT_KEYS)[number];
 function isProcurementReportKey(k: ReportKey): k is ProcurementReportKey {
   return (PROCUREMENT_REPORT_KEYS as readonly string[]).includes(k);
+}
+
+/**
+ * How a delivery measured against the window the supplier agreed to.
+ *
+ * An order with no expected date reads "—" rather than "on time": nothing was
+ * promised, so nothing was kept. An order still awaiting goods says how far
+ * past its window it is, which is the number somebody can act on — a variance
+ * only computed after the fact would say nothing at all about the order
+ * sitting three weeks late right now.
+ */
+function DeliveryCell({ expected, received }: { expected: string | null; received: string | null }) {
+  const state = deliveryState(expected, received);
+  if (state === "no_window") return <span className="text-ink-faint">—</span>;
+  if (state === "overdue") {
+    const late = overdueDays(expected, received) ?? 0;
+    return <Badge tone="critical">{late} {late === 1 ? "day" : "days"} overdue</Badge>;
+  }
+  if (state === "awaiting") return <span className="text-ink-faint">Within window</span>;
+  return (
+    <Badge tone={state === "late" ? "attention" : "good"}>
+      {deliveryVarianceLabel(deliveryVariance(expected, received))}
+    </Badge>
+  );
+}
+
+/** One elapsed-day cell. Grey when there is nothing to measure yet. */
+function Gap({ days, last }: { days: number | null; last?: boolean }) {
+  return (
+    <td className={`py-2 text-right tnum ${last ? "" : "pr-4"} ${days === null ? "text-ink-faint" : "text-ink"}`}>
+      {dayGapLabel(days)}
+    </td>
+  );
 }
 
 function formatMinutes(minutes: number): string {
@@ -99,6 +134,7 @@ export default async function ReportDetailPage({
   const poRows = key === "purchase-orders" ? await getPurchaseOrderReport(session.tenant.id, reportPeriod) : [];
   const grnRows = key === "goods-received" ? await getGoodsReceivedReport(session.tenant.id, reportPeriod) : [];
   const invoiceRows = key === "invoices" ? await getInvoiceReport(session.tenant.id, reportPeriod) : [];
+  const cycleRows = key === "cycle-time" ? await getCycleTimeReport(session.tenant.id, reportPeriod) : [];
 
   const filteredAging = data.aging.filter(
     (c) =>
@@ -140,6 +176,16 @@ export default async function ReportDetailPage({
       (!supplierFilter || r.supplier_id === supplierFilter),
   );
 
+  const filteredCycle = cycleRows.filter(
+    (r) =>
+      (!q ||
+        r.case_number.toLowerCase().includes(q) ||
+        r.title.toLowerCase().includes(q) ||
+        (r.po_number ?? "").toLowerCase().includes(q)) &&
+      (!statusFilter || r.status === statusFilter) &&
+      (!deptFilter || r.department_name === deptFilter),
+  );
+
   const procurementReportRows: { status: string; department_name: string | null }[] = isProcurementReportKey(key)
     ? key === "rfqs"
       ? rfqRows
@@ -150,11 +196,22 @@ export default async function ReportDetailPage({
           : invoiceRows
     : [];
   const procurementStatuses = Array.from(new Set(procurementReportRows.map((r) => r.status)));
+  // Cycle time isn't a procurement-document report — its rows are requests,
+  // so its status list is stage keys and its departments come from its own
+  // rows rather than from a document table.
+  const cycleStatuses = Array.from(new Set(cycleRows.map((r) => r.status)));
+  const cycleDepartments = Array.from(new Set(cycleRows.map((r) => r.department_name).filter((d): d is string => !!d))).sort();
   const procurementDepartments = Array.from(new Set(procurementReportRows.map((r) => r.department_name).filter((d): d is string => !!d))).sort();
 
   const aging_statuses = Array.from(new Set(data.aging.map((c) => c.status)));
   const aging_priorities = Array.from(new Set(data.aging.map((c) => c.priority)));
   const all_stages = Array.from(new Set([...data.stageDurations.map((s) => s.stage_key), ...data.slaCompliance.map((s) => s.stage_key)]));
+
+  // Orders past their agreed delivery date with nothing received yet — the
+  // one figure on this report that is about today rather than the past.
+  const overduePos = filteredPos.filter(
+    (r) => deliveryState(r.expected_delivery_date, r.first_received_at) === "overdue",
+  ).length;
 
   const flags = REPORT_FILTERS[key] ?? { dates: true };
   const suppliers = flags.supplier ? await getSuppliers(session.tenant.id, true) : [];
@@ -212,10 +269,12 @@ export default async function ReportDetailPage({
         options={{
           statuses: isProcurementReportKey(key)
             ? procurementStatuses.map((s) => ({ value: s, label: s }))
-            : aging_statuses.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
+            : key === "cycle-time"
+              ? cycleStatuses.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s }))
+              : aging_statuses.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
           priorities: aging_priorities,
           stages: all_stages.map((s) => ({ value: s, label: STAGE_LABEL[s] ?? s })),
-          departments: procurementDepartments,
+          departments: key === "cycle-time" ? cycleDepartments : procurementDepartments,
           suppliers: suppliers.map((s) => ({ id: s.id, name: s.name })),
         }}
         canExport={canExport}
@@ -531,6 +590,126 @@ export default async function ReportDetailPage({
         </Card>
       )}
 
+      {key === "cycle-time" && (
+        <Card>
+          {/* The per-request working under "Time in each stage": that report
+              averages the workspace, this one shows the individual case a
+              department head or an auditor actually asks about. */}
+          <CardHeader
+            title={"Every request, gate by gate"}
+            subtitle="A blank gap means the request has not reached that gate yet — not that it took no time."
+            action={
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                <span className="text-ink-soft">
+                  Avg PR&nbsp;&rarr;&nbsp;approval:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {dayGapLabel(averageGap(filteredCycle.map((r) => r.days_pr_to_pr_approval)))}
+                  </span>
+                </span>
+                <span className="text-ink-soft">
+                  Avg PR&nbsp;&rarr;&nbsp;PO:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {dayGapLabel(averageGap(filteredCycle.map((r) => r.days_pr_to_po)))}
+                  </span>
+                </span>
+                <span className="text-ink-soft">
+                  Avg PO&nbsp;&rarr;&nbsp;GRPO:{" "}
+                  <span className="tnum font-semibold text-ink">
+                    {dayGapLabel(averageGap(filteredCycle.map((r) => r.days_po_approval_to_grn)))}
+                  </span>
+                </span>
+              </div>
+            }
+          />
+          <CardBody className="overflow-x-auto">
+            {filteredCycle.length === 0 ? (
+              <p className="text-sm text-ink-faint">
+                {cycleRows.length === 0 ? "No requests raised in this period." : "Nothing matches these filters."}
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="pb-2 pr-4 font-medium">PR No.</th>
+                    <th className="pb-2 pr-4 font-medium">Department</th>
+                    <th className="pb-2 pr-4 font-medium">Stage</th>
+                    <th className="pb-2 pr-4 font-medium">PR created on</th>
+                    <th className="pb-2 pr-4 font-medium">PR approved on</th>
+                    <th className="pb-2 pr-4 text-right font-medium">PR&nbsp;&rarr;&nbsp;PR approval</th>
+                    <th className="pb-2 pr-4 font-medium">PO date</th>
+                    <th className="pb-2 pr-4 text-right font-medium">PR&nbsp;&rarr;&nbsp;PO creation</th>
+                    <th className="pb-2 pr-4 font-medium">PO approved on</th>
+                    <th className="pb-2 pr-4 text-right font-medium">PO creation&nbsp;&rarr;&nbsp;PO approval</th>
+                    <th className="pb-2 pr-4 font-medium">PO generated on</th>
+                    <th className="pb-2 pr-4 font-medium">PO no.</th>
+                    <th className="pb-2 pr-4 font-medium">Expected delivery</th>
+                    <th className="pb-2 pr-4 font-medium">GRPO date</th>
+                    <th className="pb-2 pr-4 font-medium">GRPO no.</th>
+                    <th className="pb-2 pr-4 text-right font-medium">PO approval&nbsp;&rarr;&nbsp;GRPO</th>
+                    <th className="pb-2 pr-4 font-medium">Against the window</th>
+                    <th className="pb-2 font-medium">PO closed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCycle.map((r) => (
+                    <tr key={r.case_id} className="border-b border-line last:border-0">
+                      <td className="py-2 pr-4 tnum">
+                        <Link href={`/app/cases/${r.case_id}`} className="font-medium text-brand hover:underline">
+                          {r.case_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-ink-soft">{r.department_name ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        <Badge tone={STAGE_TONE[r.status] ?? "neutral"}>{STAGE_LABEL[r.status] ?? r.status}</Badge>
+                      </td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.pr_created_at)}</td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.pr_approved_at ? formatDate(r.pr_approved_at) : "—"}</td>
+                      <Gap days={r.days_pr_to_pr_approval} />
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.po_date ? formatDate(r.po_date) : "—"}</td>
+                      <Gap days={r.days_pr_to_po} />
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.po_approved_at ? formatDate(r.po_approved_at) : "—"}</td>
+                      <Gap days={r.days_po_to_po_approval} />
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.po_created_at ? formatDate(r.po_created_at) : "—"}</td>
+                      <td className="py-2 pr-4">
+                        {r.po_number ? (
+                          <span className="font-mono text-xs text-ink">{r.po_number}</span>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">
+                        {r.expected_delivery_date ? formatDate(r.expected_delivery_date) : "—"}
+                      </td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{r.grn_date ? formatDate(r.grn_date) : "—"}</td>
+                      <td className="py-2 pr-4">
+                        {r.grn_number ? (
+                          <span className="font-mono text-xs text-ink">
+                            {r.grn_number}
+                            {/* A part delivery is not the whole order, so say
+                                so rather than letting the first receipt read
+                                as the end of the line. */}
+                            {r.grn_count > 1 && (
+                              <span className="ml-1 font-sans text-ink-faint">+{r.grn_count - 1}</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        )}
+                      </td>
+                      <Gap days={r.days_po_approval_to_grn} />
+                      <td className="py-2 pr-4">
+                        <DeliveryCell expected={r.expected_delivery_date} received={r.grn_date} />
+                      </td>
+                      <td className="py-2 tnum text-ink-soft">{r.po_closed_at ? formatDate(r.po_closed_at) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
       {key === "purchase-orders" && (
         <Card>
           {/* An issued order is money committed from the moment it goes to
@@ -561,6 +740,12 @@ export default async function ReportDetailPage({
                     )}
                   </span>
                 </span>
+                {overduePos > 0 && (
+                  <span className="text-ink-soft">
+                    Past the window:{" "}
+                    <span className="tnum font-semibold text-critical">{overduePos}</span>
+                  </span>
+                )}
               </div>
             }
           />
@@ -578,7 +763,9 @@ export default async function ReportDetailPage({
                     <th className="pb-2 pr-4 font-medium">Status</th>
                     <th className="pb-2 pr-4 text-right font-medium">Total</th>
                     <th className="pb-2 pr-4 text-right font-medium">Billed</th>
-                    <th className="pb-2 font-medium">Issued</th>
+                    <th className="pb-2 pr-4 font-medium">Issued</th>
+                    <th className="pb-2 pr-4 font-medium">Expected delivery</th>
+                    <th className="pb-2 font-medium">Against the window</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -610,7 +797,7 @@ export default async function ReportDetailPage({
                         </Link>
                       </td>
                       <td className="py-2 pr-4">
-                        <Badge tone={r.status === "issued" ? "good" : r.status === "pending_approval" ? "attention" : "critical"}>{r.status}</Badge>
+                        <Badge tone={PO_STATUS_TONE[r.status] ?? "neutral"}>{PO_STATUS_LABEL[r.status] ?? r.status}</Badge>
                       </td>
                       <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(r.total_cents, { currency: r.currency })}</td>
                       <td className="py-2 pr-4 text-right tnum">
@@ -622,7 +809,13 @@ export default async function ReportDetailPage({
                           </span>
                         )}
                       </td>
-                      <td className="py-2 tnum text-ink-soft">{formatDate(r.issued_at)}</td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">{formatDate(r.issued_at)}</td>
+                      <td className="py-2 pr-4 tnum text-ink-soft">
+                        {r.expected_delivery_date ? formatDate(r.expected_delivery_date) : "—"}
+                      </td>
+                      <td className="py-2">
+                        <DeliveryCell expected={r.expected_delivery_date} received={r.first_received_at} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

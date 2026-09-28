@@ -1,6 +1,7 @@
 import { Users as UsersIcon } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getMembers, getRoles } from "@/lib/data/rbac";
+import { getPlacementOptions } from "@/lib/data/reference";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { InviteForm } from "./invite-form";
 import { MemberRowItem } from "./member-row";
@@ -15,7 +16,11 @@ export default async function UsersPage() {
     );
   }
 
-  const [members, roles] = await Promise.all([getMembers(session.tenant.id), getRoles(session.tenant.id)]);
+  const [members, roles, placementOptions] = await Promise.all([
+    getMembers(session.tenant.id),
+    getRoles(session.tenant.id),
+    getPlacementOptions(session.tenant.id),
+  ]);
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
@@ -40,12 +45,19 @@ export default async function UsersPage() {
                 <th className="pb-2 pr-4 font-medium">Member</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
                 <th className="pb-2 pr-4 font-medium">Role</th>
+                <th className="pb-2 pr-4 font-medium">Where they sit</th>
                 <th className="pb-2 font-medium" />
               </tr>
             </thead>
             <tbody>
               {members.map((m) => (
-                <MemberRowItem key={m.membership_id} member={m} roles={roles} isSelf={m.user_id === session.user.id} />
+                <MemberRowItem
+                  key={m.membership_id}
+                  member={m}
+                  roles={roles}
+                  placementOptions={placementOptions}
+                  isSelf={m.user_id === session.user.id}
+                />
               ))}
             </tbody>
           </table>

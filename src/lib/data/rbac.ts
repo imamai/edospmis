@@ -13,7 +13,7 @@ export async function getMembers(tenantId: string): Promise<MemberRow[]> {
   const [{ data: memberships }, { data: userRoles }] = await Promise.all([
     supabase
       .from("edospmis_memberships")
-      .select("id, user_id, status, edospmis_users(email, full_name)")
+      .select("id, user_id, status, business_unit_id, branch_id, department_id, team_id, edospmis_users(email, full_name)")
       .eq("tenant_id", tenantId)
       .order("created_at"),
     supabase
@@ -41,6 +41,12 @@ export async function getMembers(tenantId: string): Promise<MemberRow[]> {
       full_name: user?.full_name ?? null,
       status: m.status,
       roles: rolesByUser.get(m.user_id) ?? [],
+      placement: {
+        business_unit_id: m.business_unit_id,
+        branch_id: m.branch_id,
+        department_id: m.department_id,
+        team_id: m.team_id,
+      },
     };
   });
 }

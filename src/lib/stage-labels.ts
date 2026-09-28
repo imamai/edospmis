@@ -90,3 +90,28 @@ export const PANEL_STAGE_KEYS = {
 export function isCurrentStage(panelStageKeys: readonly string[], currentStageKey: string): boolean {
   return panelStageKeys.includes(currentStageKey);
 }
+
+/**
+ * A purchase order's own states, which are not case stages.
+ *
+ * `closed` arrived in migration 0043 — before it, every order ever raised
+ * read `issued` forever, so "is this order finished?" could only be answered
+ * by opening the case. Three screens rendered the status with their own
+ * inline ternary, and a fourth state would have had to be added to each of
+ * them; this is the one place that decides now.
+ */
+export const PO_STATUS_LABEL: Record<string, string> = {
+  pending_approval: "Awaiting approval",
+  issued: "Issued",
+  closed: "Closed",
+  cancelled: "Cancelled",
+};
+
+export const PO_STATUS_TONE: Record<string, Tone> = {
+  pending_approval: "attention",
+  issued: "good",
+  // Settled and done: the brand navy, the same "finished" the Completed
+  // stage uses, rather than the green that means "live and in order".
+  closed: "brand",
+  cancelled: "critical",
+};

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PdfLinkButton } from "@/components/ui/pdf-link-button";
+import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/stage-labels";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { Supplier } from "@/lib/database.types";
 
@@ -98,7 +99,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
                       </Link>
                     </td>
                     <td className="py-2 pr-4">
-                      <Badge tone={p.status === "issued" ? "good" : p.status === "pending_approval" ? "attention" : "critical"}>{p.status}</Badge>
+                      <Badge tone={PO_STATUS_TONE[p.status] ?? "neutral"}>{PO_STATUS_LABEL[p.status] ?? p.status}</Badge>
                     </td>
                     <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(p.total_cents, { currency: p.currency })}</td>
                     <td className="py-2 pr-4 text-ink-soft">{formatDate(p.issued_at)}</td>

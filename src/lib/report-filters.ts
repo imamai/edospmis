@@ -27,6 +27,7 @@ export interface ReportFilterFlags {
 
 export const REPORT_FILTERS: Record<string, ReportFilterFlags> = {
   aging: { dates: true, search: true, status: true, priority: true, searchHint: "PR number or title" },
+  "cycle-time": { dates: true, search: true, status: true, dept: true, searchHint: "PR number, PO number or title" },
   "stage-durations": { dates: true, stage: true },
   "sla-compliance": { dates: true, stage: true },
   "supplier-performance": { dates: true, search: true, searchHint: "Supplier name" },

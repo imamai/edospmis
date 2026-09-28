@@ -1,30 +1,57 @@
 "use client";
 
-import { useActionState, useEffect, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateMemberRole, setMembershipStatus, type UserFormState } from "./actions";
+import { updateMemberRole, setMembershipStatus, setMemberPlacement, type UserFormState } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import { SelectInput } from "@/components/ui/field";
-import type { MemberRow, RoleWithPermissions } from "@/lib/database.types";
+import { PlacementPicker } from "@/components/app/placement-picker";
+import { placementLabel } from "@/lib/placement";
+import { Button } from "@/components/ui/button";
+import type { MemberRow, PlacementOptions, RoleWithPermissions } from "@/lib/database.types";
 
 const initial: UserFormState = { error: null, ok: null };
 
 export function MemberRowItem({
   member,
   roles,
+  placementOptions,
   isSelf,
 }: {
   member: MemberRow;
   roles: RoleWithPermissions[];
+  placementOptions: PlacementOptions;
   isSelf: boolean;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(updateMemberRole, initial);
   const [statusPending, startStatus] = useTransition();
+  const [editingPlace, setEditingPlace] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+  const [placePending, startPlace] = useTransition();
 
   useEffect(() => {
     if (state.ok) router.refresh();
   }, [state.ok, router]);
+
+  /**
+   * Deliberately a transition rather than `useActionState`: the editor should
+   * close only once the save has actually succeeded, and closing it from an
+   * effect that watches the result is both a lint error and a race — the
+   * panel would shut on a stale success the next time it was opened.
+   */
+  function savePlacement(formData: FormData) {
+    startPlace(async () => {
+      const result = await setMemberPlacement(initial, formData);
+      if (result.error) {
+        setPlaceError(result.error);
+        return;
+      }
+      setPlaceError(null);
+      setEditingPlace(false);
+      router.refresh();
+    });
+  }
 
   const currentRoleId = member.roles[0]?.id ?? "";
 
@@ -71,7 +98,39 @@ export function MemberRowItem({
         </form>
         {state.error && <p className="mt-1 text-xs text-critical">{state.error}</p>}
       </td>
-      <td className="py-3 text-right">
+      <td className="py-3 pr-4 align-top">
+        {editingPlace ? (
+          <form action={savePlacement} className="flex w-64 flex-col gap-2.5">
+            <input type="hidden" name="membership_id" value={member.membership_id} />
+            <PlacementPicker options={placementOptions} value={member.placement} disabled={placePending} compact />
+            {placeError && <p className="text-xs text-critical">{placeError}</p>}
+            <div className="flex items-center gap-2">
+              <Button type="submit" size="sm" busy={placePending}>
+                {placePending ? "Saving" : "Save"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlaceError(null);
+                  setEditingPlace(false);
+                }}
+                className="text-xs font-semibold text-ink-faint hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingPlace(true)}
+            className="text-left text-sm text-ink-soft hover:text-brand hover:underline"
+          >
+            {placementLabel(member.placement, placementOptions)}
+          </button>
+        )}
+      </td>
+      <td className="py-3 text-right align-top">
         {!isSelf && (
           <button
             type="button"

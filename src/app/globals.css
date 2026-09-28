@@ -51,6 +51,9 @@
   --shadow-raised: 0 4px 12px rgb(22 26 35 / 0.06), 0 12px 32px -12px rgb(22 26 35 / 0.16);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Only the public pages use this. Inside /app a heading is a label on a
+     screen, not a statement, so the working UI stays on Inter throughout. */
+  --font-display: var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -111,7 +114,104 @@ h1, h2, h3, h4 {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
+    /* Delays must go too: a staggered entrance with `animation-fill-mode:
+       both` starts at opacity 0, so zeroing only the duration would leave
+       text invisible for the length of its delay. */
+    animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Marketing surface
+ *
+ * A darker, higher-contrast treatment used only by the public pages
+ * (landing, pricing, contact, sign-in). Everything here is namespaced
+ * `mk-` so the working application keeps its calm daylight palette and
+ * nothing in /app can pick these up by accident.
+ * ------------------------------------------------------------------ */
+
+.mk-dark {
+  background:
+    radial-gradient(120% 130% at 12% -15%, #2f4d78 0%, #12233b 44%, #0b1626 80%);
+  color: #eef2f8;
+  isolation: isolate;
+}
+
+.mk-glass {
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.mk-grid-lines {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.mk-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.mk-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgb(22 26 35 / 0.1), 0 24px 56px -20px rgb(22 26 35 / 0.28);
+}
+
+@keyframes pmis-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sections animate in FROM a visible resting state — the page is fully
+   readable at rest, never parked at opacity 0 waiting on a scroll. */
+.rise {
+  animation: pmis-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Scale only: the track owns horizontal movement, so the photographs
+   themselves just breathe very slowly in place. */
+@keyframes hero-drift {
+  from { transform: scale(1.04); }
+  to   { transform: scale(1.12); }
+}
+
+.hero-drift {
+  animation: hero-drift 14s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Hero slideshow — a horizontal carousel.
+ *
+ * The track holds four panels for three photographs: the first is repeated
+ * at the end, so when the animation loops from -75% back to 0 it cuts
+ * between two copies of the same picture and the rewind is invisible.
+ */
+@keyframes hero-slide {
+  0%,   22%  { transform: translateX(0); }
+  25%,  47%  { transform: translateX(-25%); }
+  50%,  72%  { transform: translateX(-50%); }
+  75%, 100%  { transform: translateX(-75%); }
+}
+
+.hero-track {
+  width: 400%;
+  animation: hero-slide 28s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  will-change: transform;
+}
+
+/* Headline words rise in one after another. The delay is set per word
+   inline; this only carries the motion. */
+@keyframes word-rise {
+  from { opacity: 0; transform: translateY(0.55em); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.word-rise {
+  display: inline-block;
+  animation: word-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

@@ -158,3 +158,59 @@ export async function setMembershipStatus(
   revalidatePath("/app/settings/users");
   return { error: null, ok: status === "suspended" ? "Member suspended." : "Member reactivated." };
 }
+
+/**
+ * Where this person sits in the organisation.
+ *
+ * Only the deepest level chosen is written — the trigger added in migration
+ * 0044 derives the branch and business unit from it, so the four columns can
+ * never contradict each other whoever wrote them. Passing all four from here
+ * would just be four chances to disagree.
+ *
+ * The update itself is guarded twice: this permission check, and the
+ * row-level policy on edospmis_memberships, which already requires
+ * admin.users.manage. The check here exists to give a readable answer rather
+ * than a silent no-op.
+ */
+export async function setMemberPlacement(_prev: UserFormState, form: FormData): Promise<UserFormState> {
+  const session = await requireSession();
+  if (!can(session, "admin.users.manage")) {
+    return { error: "You don't have permission to manage users.", ok: null };
+  }
+
+  const membershipId = String(form.get("membership_id") ?? "");
+  if (!membershipId) return { error: "Couldn't tell which member that was.", ok: null };
+
+  const teamId = String(form.get("team_id") ?? "") || null;
+  const departmentId = String(form.get("department_id") ?? "") || null;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("edospmis_memberships")
+    .update({
+      team_id: teamId,
+      department_id: teamId ? null : departmentId,
+      // Cleared so the trigger derives them rather than keeping a stale
+      // ancestor from a previous placement.
+      branch_id: null,
+      business_unit_id: null,
+    })
+    .eq("id", membershipId)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) {
+    return { error: "Couldn't save where this person sits. Try again.", ok: null };
+  }
+
+  await logAudit({
+    tenantId: session.tenant.id,
+    actorId: session.user.id,
+    action: "membership.placement_set",
+    entityType: "membership",
+    entityId: membershipId,
+    after: { team_id: teamId, department_id: departmentId },
+  });
+
+  revalidatePath("/app/settings/users");
+  return { error: null, ok: "Saved." };
+}

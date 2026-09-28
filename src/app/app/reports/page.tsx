@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Clock3, FileSearch, PackageCheck, Receipt, ShieldCheck, ShoppingCart, Tags, Truck } from "lucide-react";
+import { ChevronRight, Clock3, FileSearch, GitCompareArrows, PackageCheck, Receipt, ShieldCheck, ShoppingCart, Tags, Truck } from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getAnalytics } from "@/lib/data/analytics";
 import { resolvePeriod } from "@/lib/report-period";
@@ -21,6 +21,13 @@ const REPORTS = [
     description: "Average time spent per stage, and how many cases are sitting there right now.",
     category: "requests",
     icon: Clock3,
+  },
+  {
+    key: "cycle-time",
+    title: "Procure-to-receive cycle time",
+    description: "Every request from raised to goods received, with the days spent waiting at each gate.",
+    category: "requests",
+    icon: GitCompareArrows,
   },
   {
     key: "sla-compliance",

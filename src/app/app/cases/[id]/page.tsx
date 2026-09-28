@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireSession, can } from "@/lib/data/session";
+import { getBudgetStatus, getBudgets } from "@/lib/data/budgets";
+import { getPlacementOptions } from "@/lib/data/reference";
+import { placementLabel } from "@/lib/placement";
 import { getCaseDetail } from "@/lib/data/cases";
 import { getProcurementDetail, getSuppliers } from "@/lib/data/procurement";
 import { getFulfilmentDetail } from "@/lib/data/fulfilment";
@@ -56,6 +59,17 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   const financeDetail = poIssued ? await getFinanceDetail(session.tenant.id, c.id) : null;
   const canClose = can(session, "procurement.case.close") && !TERMINAL_CASE_STATUSES.includes(c.status);
   const canCancel = can(session, "procurement.pr.cancel") && !TERMINAL_CASE_STATUSES.includes(c.status);
+
+  // The balance an approver needs before they decide, not after. Skipped
+  // entirely when the request names no budget line, which is every request in
+  // a workspace that has not set any up.
+  const [placementOptions, budgetStatus, budgetRow] = await Promise.all([
+    getPlacementOptions(session.tenant.id),
+    pr.budget_id ? getBudgetStatus(pr.budget_id) : Promise.resolve(null),
+    pr.budget_id
+      ? getBudgets(session.tenant.id).then((all) => all.find((b) => b.id === pr.budget_id) ?? null)
+      : Promise.resolve(null),
+  ]);
   const canHold = can(session, "procurement.case.hold") && !TERMINAL_CASE_STATUSES.includes(c.status);
 
   const stageDurations = await getStageDurations(session.tenant.id, c.id);
@@ -171,7 +185,63 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               <p className="text-xs text-ink-faint">Opened</p>
               <p className="font-medium text-ink">{formatDate(c.opened_at)}</p>
             </div>
+            <div className="col-span-2 sm:col-span-3">
+              <p className="text-xs text-ink-faint">Raised from</p>
+              <p className="font-medium text-ink">{placementLabel(pr, placementOptions)}</p>
+            </div>
           </div>
+
+          {budgetRow && budgetStatus && (
+            <div
+              className={
+                budgetStatus.available_cents < 0
+                  ? "rounded-lg border border-critical/25 bg-critical-soft p-3.5"
+                  : "rounded-lg border border-line bg-surface-sunk p-3.5"
+              }
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <p className="text-sm font-semibold text-ink">
+                  Budget · {budgetRow.name}
+                  <span className="ml-2 font-normal text-ink-faint">{budgetRow.period_name}</span>
+                </p>
+                <p className="text-sm">
+                  <span className="text-ink-faint">Available </span>
+                  <span
+                    className={
+                      budgetStatus.available_cents < 0
+                        ? "tnum font-semibold text-critical"
+                        : "tnum font-semibold text-good"
+                    }
+                  >
+                    {formatMoney(budgetStatus.available_cents, { currency: budgetRow.currency })}
+                  </span>
+                </p>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                <div>
+                  <p className="text-ink-faint">Allocated</p>
+                  <p className="tnum font-medium text-ink">{formatMoney(budgetStatus.allocated_cents, { currency: budgetRow.currency })}</p>
+                </div>
+                <div>
+                  <p className="text-ink-faint">Committed on orders</p>
+                  <p className="tnum font-medium text-ink">{formatMoney(budgetStatus.committed_cents, { currency: budgetRow.currency })}</p>
+                </div>
+                <div>
+                  <p className="text-ink-faint">Approved, not ordered</p>
+                  <p className="tnum font-medium text-ink">{formatMoney(budgetStatus.pending_cents, { currency: budgetRow.currency })}</p>
+                </div>
+                <div>
+                  <p className="text-ink-faint">Paid so far</p>
+                  <p className="tnum font-medium text-ink">{formatMoney(budgetStatus.spent_cents, { currency: budgetRow.currency })}</p>
+                </div>
+              </div>
+              {pr.budget_override_reason && (
+                <p className="mt-2.5 border-t border-critical/20 pt-2 text-xs text-critical">
+                  <strong className="font-semibold">Raised over budget:</strong> {pr.budget_override_reason}
+                </p>
+              )}
+            </div>
+          )}
 
           {pr.items.length > 0 && (
             <table className="w-full text-left text-sm">

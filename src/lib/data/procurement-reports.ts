@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { ReportPeriod } from "@/lib/data/analytics";
+import { averageGap, dayGap, deliveryState, deliveryVariance } from "@/lib/cycle-time";
 
 interface CaseLookup {
   case_number: string;
@@ -94,27 +95,43 @@ export interface PurchaseOrderReportRow {
    * was spend that had already been invoiced.
    */
   invoiced_net_cents: number;
+  /** The date the supplier agreed to deliver by — null where none was set. */
+  expected_delivery_date: string | null;
+  /** The first receipt against this order, which is what the window is judged on. */
+  first_received_at: string | null;
+  /** Whole days late (negative: early). Null until there is both a window and a receipt. */
+  delivery_variance_days: number | null;
 }
 
 export async function getPurchaseOrderReport(tenantId: string, period?: ReportPeriod): Promise<PurchaseOrderReportRow[]> {
   const supabase = await createClient();
   let query = supabase
     .from("edospmis_purchase_orders")
-    .select("id, case_id, po_number, supplier_id, total_cents, currency, status, issued_at, edospmis_suppliers(name)")
+    .select("id, case_id, po_number, supplier_id, total_cents, currency, status, issued_at, expected_delivery_date, edospmis_suppliers(name)")
     .eq("tenant_id", tenantId);
   if (period?.from) query = query.gte("issued_at", period.from);
   if (period?.to) query = query.lte("issued_at", period.to);
   const { data: pos } = await query.order("issued_at", { ascending: false });
   if (!pos || pos.length === 0) return [];
 
-  const [caseByIdMap, { data: invoices }] = await Promise.all([
+  const [caseByIdMap, { data: invoices }, { data: receipts }] = await Promise.all([
     lookupCases(supabase, tenantId, pos.map((p) => p.case_id)),
     supabase
       .from("edospmis_invoices")
       .select("po_id, subtotal_cents, status")
       .eq("tenant_id", tenantId)
       .in("po_id", pos.map((p) => p.id)),
+    // Oldest first, so the first one seen per order is the first delivery —
+    // a part delivery still stops the clock on the window.
+    supabase
+      .from("edospmis_grns")
+      .select("po_id, received_at")
+      .eq("tenant_id", tenantId)
+      .in("po_id", pos.map((p) => p.id))
+      .order("received_at", { ascending: true }),
   ]);
+  const firstReceiptByPo = new Map<string, string>();
+  for (const g of receipts ?? []) if (!firstReceiptByPo.has(g.po_id)) firstReceiptByPo.set(g.po_id, g.received_at);
   const billedByPo = new Map<string, number>();
   for (const i of invoices ?? []) {
     if (i.status === "void") continue;
@@ -124,7 +141,11 @@ export async function getPurchaseOrderReport(tenantId: string, period?: ReportPe
   return pos.map((p) => {
     const c = caseByIdMap.get(p.case_id);
     const supplier = p.edospmis_suppliers as unknown as { name: string } | null;
+    const firstReceipt = firstReceiptByPo.get(p.id) ?? null;
     return {
+      expected_delivery_date: p.expected_delivery_date,
+      first_received_at: firstReceipt,
+      delivery_variance_days: deliveryVariance(p.expected_delivery_date, firstReceipt),
       invoiced_net_cents: billedByPo.get(p.id) ?? 0,
       po_id: p.id,
       case_id: p.case_id,
@@ -287,4 +308,258 @@ export async function getInvoiceReport(tenantId: string, period?: ReportPeriod):
       submitted_at: i.submitted_at,
     };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Procure-to-receive cycle time
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface CycleTimeReportRow {
+  case_id: string;
+  case_number: string;
+  title: string;
+  department_name: string | null;
+  /** Where the request has got to, so a blank gap reads as "not there yet". */
+  status: string;
+
+  pr_created_at: string;
+  /** When the last approval step cleared — null if it never did. */
+  pr_approved_at: string | null;
+
+  /** The date on the order the supplier sees. */
+  po_date: string | null;
+  /** When the order record was raised in the system. */
+  po_created_at: string | null;
+  po_approved_at: string | null;
+  po_number: string | null;
+
+  /** What the supplier agreed to, and how the delivery measured against it. */
+  expected_delivery_date: string | null;
+  delivery_variance_days: number | null;
+  /** When the order itself ended — null while it is still live. */
+  po_closed_at: string | null;
+
+  grn_date: string | null;
+  grn_number: string | null;
+  /** How many receipts this order has — a part delivery is not the whole. */
+  grn_count: number;
+
+  days_pr_to_pr_approval: number | null;
+  days_pr_to_po: number | null;
+  days_po_to_po_approval: number | null;
+  days_po_approval_to_grn: number | null;
+}
+
+/**
+ * One row per purchase request, from raised to goods received.
+ *
+ * The standard procurement cycle-time sheet: every gate a request passes
+ * through, with the elapsed days between them, so the step that is actually
+ * costing the time is visible instead of inferred. `Time in each stage`
+ * already averages this across the workspace — this is the per-request
+ * working underneath it, which is what gets sent to a department head or an
+ * auditor who wants to see the individual case.
+ *
+ * Sources, none of them inferred:
+ *   PR created    edospmis_prs.created_at
+ *   PR approved   the case's 'approved' stage-history row. Not `max(decided_at)`
+ *                 over approvals — a rejected request has approved steps too,
+ *                 and that would report the last one as though the request had
+ *                 cleared.
+ *   PO date       edospmis_purchase_orders.issued_at
+ *   PO generated  edospmis_purchase_orders.created_at
+ *   PO approved   edospmis_purchase_orders.approved_at (migration 0042)
+ *   GRPO          the first edospmis_grns row against the order
+ *
+ * Where a case has several orders or several receipts, this takes the first
+ * of each and reports the receipt count, because the question the report
+ * answers is when the cycle reached that gate, not how many documents it
+ * eventually produced.
+ */
+export async function getCycleTimeReport(tenantId: string, period?: ReportPeriod): Promise<CycleTimeReportRow[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("edospmis_prs")
+    .select("id, case_id, title, department_id, created_at")
+    .eq("tenant_id", tenantId);
+  if (period?.from) query = query.gte("created_at", period.from);
+  if (period?.to) query = query.lte("created_at", period.to);
+  const { data: prs } = await query.order("created_at", { ascending: false });
+  if (!prs || prs.length === 0) return [];
+
+  const caseIds = prs.map((p) => p.case_id);
+  const [{ data: cases }, { data: departments }, { data: approvedStages }, { data: pos }, { data: grns }] =
+    await Promise.all([
+      supabase.from("edospmis_cases").select("id, case_number, status, department_id").eq("tenant_id", tenantId).in("id", caseIds),
+      supabase.from("edospmis_departments").select("id, name").eq("tenant_id", tenantId),
+      supabase
+        .from("edospmis_case_stage_history")
+        .select("case_id, entered_at")
+        .eq("tenant_id", tenantId)
+        .eq("stage_key", "approved")
+        .in("case_id", caseIds),
+      supabase
+        .from("edospmis_purchase_orders")
+        .select("case_id, po_number, issued_at, created_at, approved_at, expected_delivery_date, closed_at")
+        .eq("tenant_id", tenantId)
+        .in("case_id", caseIds)
+        .order("issued_at", { ascending: true }),
+      supabase
+        .from("edospmis_grns")
+        .select("case_id, grn_number, received_at")
+        .eq("tenant_id", tenantId)
+        .in("case_id", caseIds)
+        .order("received_at", { ascending: true }),
+    ]);
+
+  const caseById = new Map((cases ?? []).map((c) => [c.id, c]));
+  const deptById = new Map((departments ?? []).map((d) => [d.id, d.name as string]));
+
+  // A case re-entering approval after being returned gets a second 'approved'
+  // row; the earliest is the one that cleared the request as raised.
+  const approvedAtByCase = new Map<string, string>();
+  for (const s of approvedStages ?? []) {
+    const seen = approvedAtByCase.get(s.case_id);
+    if (!seen || s.entered_at < seen) approvedAtByCase.set(s.case_id, s.entered_at);
+  }
+
+  // Both lists arrive oldest-first, so the first one seen for a case is the
+  // earliest and later ones are skipped.
+  const poByCase = new Map<
+    string,
+    {
+      po_number: string;
+      issued_at: string;
+      created_at: string;
+      approved_at: string | null;
+      expected_delivery_date: string | null;
+      closed_at: string | null;
+    }
+  >();
+  for (const p of pos ?? []) if (!poByCase.has(p.case_id)) poByCase.set(p.case_id, p);
+
+  const grnByCase = new Map<string, { grn_number: string; received_at: string }>();
+  const grnCountByCase = new Map<string, number>();
+  for (const g of grns ?? []) {
+    if (!grnByCase.has(g.case_id)) grnByCase.set(g.case_id, g);
+    grnCountByCase.set(g.case_id, (grnCountByCase.get(g.case_id) ?? 0) + 1);
+  }
+
+  return prs.map((pr) => {
+    const c = caseById.get(pr.case_id);
+    const po = poByCase.get(pr.case_id) ?? null;
+    const grn = grnByCase.get(pr.case_id) ?? null;
+    const prApprovedAt = approvedAtByCase.get(pr.case_id) ?? null;
+    const poApprovedAt = po?.approved_at ?? null;
+
+    return {
+      case_id: pr.case_id,
+      case_number: c?.case_number ?? "",
+      title: pr.title,
+      department_name: deptById.get(pr.department_id ?? c?.department_id ?? "") ?? null,
+      status: c?.status ?? "",
+
+      pr_created_at: pr.created_at,
+      pr_approved_at: prApprovedAt,
+
+      po_date: po?.issued_at ?? null,
+      po_created_at: po?.created_at ?? null,
+      po_approved_at: poApprovedAt,
+      po_number: po?.po_number ?? null,
+
+      expected_delivery_date: po?.expected_delivery_date ?? null,
+      delivery_variance_days: deliveryVariance(po?.expected_delivery_date ?? null, grn?.received_at ?? null),
+      po_closed_at: po?.closed_at ?? null,
+
+      grn_date: grn?.received_at ?? null,
+      grn_number: grn?.grn_number ?? null,
+      grn_count: grnCountByCase.get(pr.case_id) ?? 0,
+
+      days_pr_to_pr_approval: dayGap(pr.created_at, prApprovedAt),
+      days_pr_to_po: dayGap(pr.created_at, po?.created_at ?? null),
+      days_po_to_po_approval: dayGap(po?.created_at ?? null, poApprovedAt),
+      days_po_approval_to_grn: dayGap(poApprovedAt, grn?.received_at ?? null),
+    };
+  });
+}
+
+export interface CycleGate {
+  key: "pr_approval" | "sourcing" | "po_approval" | "delivery";
+  label: string;
+  /** Average days at this gate, or null where nothing has cleared it yet. */
+  avgDays: number | null;
+  /** How many requests contributed — the denominator behind the average. */
+  measured: number;
+}
+
+export interface CycleSummary {
+  gates: CycleGate[];
+  /** The four gates added up: raised to goods received, on average. */
+  totalDays: number | null;
+  /** Requests raised in the window, and how many got all the way to a receipt. */
+  raised: number;
+  completed: number;
+  /** Orders past their agreed delivery date with nothing received yet. */
+  overdue: number;
+  windowDays: number;
+}
+
+/**
+ * The cycle in four numbers, for the dashboard.
+ *
+ * Bounded to a recent window rather than all time, for two reasons: a
+ * workspace three years in would otherwise average its current performance
+ * against how it worked when it started, and the dashboard would pull every
+ * request it had ever raised on every page load.
+ *
+ * Each gate averages only the requests that actually cleared it — see
+ * `averageGap`. A request still sitting at approval has no sourcing time, and
+ * counting it as zero would report a stalled pipeline as a fast one.
+ */
+export async function getCycleSummary(tenantId: string, windowDays = 90): Promise<CycleSummary> {
+  const from = new Date(Date.now() - windowDays * 86_400_000).toISOString();
+  const rows = await getCycleTimeReport(tenantId, { from, to: null });
+
+  const gates: CycleGate[] = [
+    {
+      key: "pr_approval",
+      label: "Request to approval",
+      avgDays: averageGap(rows.map((r) => r.days_pr_to_pr_approval)),
+      measured: rows.filter((r) => r.days_pr_to_pr_approval !== null).length,
+    },
+    {
+      key: "sourcing",
+      label: "Approval to order",
+      avgDays: averageGap(rows.map((r) => r.days_pr_to_po)),
+      measured: rows.filter((r) => r.days_pr_to_po !== null).length,
+    },
+    {
+      key: "po_approval",
+      label: "Order to order approved",
+      avgDays: averageGap(rows.map((r) => r.days_po_to_po_approval)),
+      measured: rows.filter((r) => r.days_po_to_po_approval !== null).length,
+    },
+    {
+      key: "delivery",
+      label: "Order approved to goods in",
+      avgDays: averageGap(rows.map((r) => r.days_po_approval_to_grn)),
+      measured: rows.filter((r) => r.days_po_approval_to_grn !== null).length,
+    },
+  ];
+
+  const present = gates.map((g) => g.avgDays).filter((d): d is number => d !== null);
+
+  return {
+    gates,
+    // Null rather than a partial sum: adding up three of four gates and
+    // calling it the cycle would understate it without saying so.
+    totalDays: present.length === gates.length
+      ? Math.round(present.reduce((sum, d) => sum + d, 0) * 10) / 10
+      : null,
+    raised: rows.length,
+    completed: rows.filter((r) => r.grn_date !== null).length,
+    overdue: rows.filter((r) => deliveryState(r.expected_delivery_date, r.grn_date) === "overdue").length,
+    windowDays,
+  };
 }
