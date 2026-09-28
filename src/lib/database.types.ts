@@ -618,6 +618,10 @@ export interface Invoice {
   approved_by: string | null;
   approved_at: string | null;
   paid_at: string | null;
+  /** Set when an invoice is taken back. The row stays so its number remains claimed. */
+  void_reason: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
   payment_reference: string | null;
   payment_method: string | null;
   created_at: string;

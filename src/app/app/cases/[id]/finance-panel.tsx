@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { FileText, Plus, Trash2, Receipt } from "lucide-react";
 import {
   submitInvoice,
+  updateInvoice,
+  voidInvoice,
   resolveMatchException,
   approveInvoice,
   recordInvoicePayment,
@@ -141,6 +143,63 @@ export function FinancePanel({
   const [payState, setPayState] = useState<FinanceState>(initial);
   const [payPending, startPay] = useTransition();
 
+  // Correcting reuses the submit modal rather than keeping a second copy of
+  // the line editor: the two forms differ only in what they are prefilled
+  // from and which action they call, and a duplicate would drift.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [voidState, setVoidState] = useState<FinanceState>(initial);
+  const [voidPending, startVoid] = useTransition();
+
+  const editing = invoices.find((i) => i.id === editingId) ?? null;
+
+  function startCorrecting(invoice: (typeof invoices)[number]) {
+    setSubmitState(initial);
+    setRows(
+      invoice.items.length > 0
+        ? invoice.items.map((it, idx) => ({
+            id: idx + 1,
+            description: it.description,
+            unit: it.unit,
+            qty: it.qty,
+            unitCost: it.unit_cost_cents / 100,
+          }))
+        : [{ id: 1, description: "", unit: "", qty: 1, unitCost: 0 }],
+    );
+    setEditingId(invoice.id);
+  }
+
+  function closeInvoiceModal() {
+    setSubmitting(false);
+    setEditingId(null);
+  }
+
+  function editForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    startSubmit(async () => {
+      const result = await updateInvoice(initial, form);
+      setSubmitState(result);
+      if (result.ok) {
+        setEditingId(null);
+        router.refresh();
+      }
+    });
+  }
+
+  function voidForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    startVoid(async () => {
+      const result = await voidInvoice(initial, form);
+      setVoidState(result);
+      if (result.ok) {
+        setVoidingId(null);
+        router.refresh();
+      }
+    });
+  }
+
   function submitForm(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -244,14 +303,21 @@ export function FinancePanel({
               {invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
             </Button>
             <Modal
-              open={submitting}
-              onClose={() => setSubmitting(false)}
-              title={invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
+              open={submitting || editing !== null}
+              onClose={closeInvoiceModal}
+              title={
+                editing
+                  ? `Correct invoice ${editing.invoice_number}`
+                  : invoices.length === 0
+                    ? "Submit invoice"
+                    : "Add another invoice"
+              }
               dismissible={!submitPending}
               size="lg"
             >
-              <form onSubmit={submitForm} className="flex flex-col gap-3">
+              <form onSubmit={editing ? editForm : submitForm} className="flex flex-col gap-3">
                 <input type="hidden" name="case_id" value={caseId} />
+                {editing && <input type="hidden" name="invoice_id" value={editing.id} />}
                 <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
                   These lines are prefilled from <span className="font-semibold text-ink">{matchBasis.poNumber}</span>. Each line
                   is checked against that order&rsquo;s unit price, and the running total against what has already been billed
@@ -349,8 +415,40 @@ export function FinancePanel({
                   <FileText className="h-3.5 w-3.5" />
                   PDF
                 </PdfLinkButton>
+                {/* Correcting is for an invoice still being checked. Once it
+                    is approved or paid it is a commitment somebody signed
+                    for, and the remedy is to void and re-enter so both stay
+                    on the record — the database refuses it either way. */}
+                {canSubmit && ["submitted", "matched", "exception"].includes(invoice.status) && (
+                  <button
+                    type="button"
+                    onClick={() => startCorrecting(invoice)}
+                    className="rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand"
+                  >
+                    Correct
+                  </button>
+                )}
+                {canApprove && invoice.status !== "paid" && invoice.status !== "void" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVoidState(initial);
+                      setVoidingId(invoice.id);
+                    }}
+                    className="rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-critical hover:text-critical"
+                  >
+                    Void
+                  </button>
+                )}
               </div>
             </div>
+
+            {invoice.status === "void" && invoice.void_reason && (
+              <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
+                <span className="font-semibold text-ink">Voided.</span> {invoice.void_reason} &mdash; the number stays
+                claimed, so the same supplier invoice cannot be entered again by mistake.
+              </p>
+            )}
 
             {invoice.exceptions.length > 0 && (
               <div className="flex flex-col gap-2">
@@ -427,6 +525,28 @@ export function FinancePanel({
             <TextArea label="How was this resolved?" name="resolution_note" rows={2} />
             {resolveState.error && <p className="text-xs text-critical">{resolveState.error}</p>}
             <ModalFormActions onCancel={() => setResolvingId(null)} submitLabel="Save" busy={resolvePending} />
+          </form>
+        </Modal>
+
+        <Modal
+          open={voidingId !== null}
+          onClose={() => setVoidingId(null)}
+          title="Void this invoice"
+          dismissible={!voidPending}
+          size="sm"
+        >
+          <form onSubmit={voidForm} className="flex flex-col gap-3">
+            <input type="hidden" name="case_id" value={caseId} />
+            <input type="hidden" name="invoice_id" value={voidingId ?? ""} />
+            <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
+              The invoice is not deleted. It keeps its number, its figures and this reason, which is what stops
+              the same supplier invoice being entered a second time by somebody who did not know about the first.
+              Voided invoices are left out of every total the match computes, so the order is free to be billed
+              again.
+            </p>
+            <TextArea label="Why it is being voided" name="reason" required rows={2} placeholder="e.g. Entered against the wrong case." />
+            {voidState.error && <p className="text-sm text-critical">{voidState.error}</p>}
+            <ModalFormActions onCancel={() => setVoidingId(null)} submitLabel="Void invoice" busy={voidPending} danger />
           </form>
         </Modal>
 

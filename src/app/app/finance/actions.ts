@@ -204,3 +204,73 @@ export async function revokeDelegation(delegationId: string): Promise<FinanceSta
   revalidatePath("/app/settings/delegations");
   return { error: null, ok: "Delegation revoked." };
 }
+
+/**
+ * Correcting an invoice that has been entered wrongly.
+ *
+ * The match is re-run from scratch by the database, so a corrected invoice is
+ * judged by the same rule as a fresh one and any finding raised against the
+ * old figures is cleared. Refused once the invoice has been approved or paid
+ * — at that point it is a commitment somebody signed for, and the remedy is
+ * to void it and enter the right one so both stay on the record.
+ */
+export async function updateInvoice(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+  await requireSession();
+  const invoiceId = String(form.get("invoice_id") ?? "");
+  const caseId = String(form.get("case_id") ?? "");
+  const invoiceNumber = String(form.get("invoice_number") ?? "").trim();
+  const paymentTerms = String(form.get("payment_terms") ?? "").trim() || null;
+  const dueDate = String(form.get("due_date") ?? "") || null;
+  const taxCents = Math.round(Math.max(0, Number(form.get("tax") ?? 0)) * 100);
+  const items = parseInvoiceItems(form);
+  if (!invoiceId) return { error: "Couldn't tell which invoice that was.", ok: null };
+  if (!invoiceNumber) return { error: "Enter the supplier's invoice number.", ok: null };
+  if (items.length === 0) return { error: "Add at least one line item.", ok: null };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("edospmis_update_invoice", {
+    p_invoice_id: invoiceId,
+    p_invoice_number: invoiceNumber,
+    p_items: items,
+    p_tax_cents: taxCents,
+    p_payment_terms: paymentTerms,
+    p_due_date: dueDate,
+  });
+  if (error) return { error: error.message, ok: null };
+
+  revalidatePath(`/app/cases/${caseId}`);
+  return {
+    error: null,
+    ok:
+      data === "exception"
+        ? "Invoice corrected. The match still finds a discrepancy — see below."
+        : "Invoice corrected, and it now matches the order and the receipt.",
+  };
+}
+
+/**
+ * Taking an invoice back.
+ *
+ * Not a delete. The row stays with its number, its figures and the reason,
+ * which is what keeps the same supplier invoice from being entered a second
+ * time by somebody who did not know about the first. Voided invoices are
+ * already excluded from every cumulative total the match computes.
+ */
+export async function voidInvoice(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+  await requireSession();
+  const invoiceId = String(form.get("invoice_id") ?? "");
+  const caseId = String(form.get("case_id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!invoiceId) return { error: "Couldn't tell which invoice that was.", ok: null };
+  if (!reason) return { error: "Say why this invoice is being voided.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_void_invoice", {
+    p_invoice_id: invoiceId,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message, ok: null };
+
+  revalidatePath(`/app/cases/${caseId}`);
+  return { error: null, ok: "Invoice voided." };
+}
