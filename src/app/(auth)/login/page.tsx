@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { LoginForm } from "./login-form";
+import { enabledProviders } from "@/lib/auth/providers";
 import { Spinner } from "@/components/ui/spinner";
 import { TRIAL_DAYS } from "@/lib/plans";
 
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  // Asked for on the server so a provider that is not switched on in Supabase
+  // never renders a button — see lib/auth/providers.ts.
+  const providers = await enabledProviders();
+
   return (
     <div>
       <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
@@ -28,7 +33,7 @@ export default function LoginPage() {
             </div>
           }
         >
-          <LoginForm />
+          <LoginForm providers={providers} />
         </Suspense>
       </div>
 

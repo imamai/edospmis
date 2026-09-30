@@ -6,10 +6,12 @@ import { useSearchParams } from "next/navigation";
 import { signIn, type SignInState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
+import { SocialSignIn } from "@/components/auth/social-sign-in";
+import type { ProviderId } from "@/lib/auth/providers";
 
 const initial: SignInState = { error: null };
 
-export function LoginForm() {
+export function LoginForm({ providers }: { providers: ProviderId[] }) {
   const [state, action, pending] = useActionState(signIn, initial);
   const params = useSearchParams();
 
@@ -31,6 +33,12 @@ export function LoginForm() {
 
   return (
     <form action={action} className="flex flex-col gap-4">
+      <SocialSignIn
+        label="or sign in with your email"
+        divider="below"
+        enabled={providers}
+      />
+
       <input type="hidden" name="next" value={next} />
 
       <TextInput

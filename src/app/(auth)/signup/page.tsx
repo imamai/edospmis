@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SignupForm } from "./signup-form";
+import { enabledProviders } from "@/lib/auth/providers";
 import { TRIAL_DAYS } from "@/lib/plans";
 
 export const metadata: Metadata = {
@@ -9,7 +10,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function SignUpPage() {
+export default async function SignUpPage() {
+  const providers = await enabledProviders();
+
   return (
     <div>
       <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
@@ -20,7 +23,7 @@ export default function SignUpPage() {
       </p>
 
       <div className="mt-7">
-        <SignupForm />
+        <SignupForm providers={providers} />
       </div>
 
       <p className="mt-6 text-sm text-ink-soft">
