@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * The two emails that arrive before anyone has an account yet.
+ * The emails that arrive before anyone has an account yet.
  *
  * They are sent by the application rather than by Supabase. Supabase's stock
  * auth templates are a bare line of text and a naked link, from whichever
@@ -77,6 +77,46 @@ export function signupConfirmEmail({ link, name }: { link: string; name?: string
       link,
       "",
       "If you did not create this account, ignore this message — nothing happens until the link is used.",
+      "",
+      "EDOSPMIS by EDOS Centre",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Being added to somebody else's workspace.
+ *
+ * Named for what it is from the reader's side: they did not ask for this, so
+ * the message has to say who invited them and to what, or it is indistinguishable
+ * from a phishing attempt.
+ */
+export function teamInviteEmail({
+  link,
+  workspaceName,
+  invitedBy,
+}: {
+  link: string;
+  workspaceName: string;
+  invitedBy?: string | null;
+}) {
+  const opener = invitedBy
+    ? `${invitedBy} has added you to ${workspaceName} on EDOSPMIS.`
+    : `You have been added to ${workspaceName} on EDOSPMIS.`;
+  return {
+    subject: `You've been invited to ${workspaceName} on EDOSPMIS`,
+    html: shell({
+      heading: `Join ${workspaceName} on EDOSPMIS`,
+      body: `${opener} Choose a password and you are in.`,
+      cta: "Accept the invitation",
+      link,
+    }),
+    text: [
+      opener,
+      "",
+      "Use this link to choose a password and get started:",
+      link,
+      "",
+      "If you were not expecting this, ignore the message — nothing happens until the link is used.",
       "",
       "EDOSPMIS by EDOS Centre",
     ].join("\n"),

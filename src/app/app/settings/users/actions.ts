@@ -1,17 +1,39 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
+import { canSendEmail, sendEmail } from "@/lib/notify/email";
+import { teamInviteEmail } from "@/lib/notify/auth-email";
 
 export interface UserFormState {
   error: string | null;
   ok: string | null;
 }
 
-async function isSoleTenantAdministrator(tenantId: string, userId: string): Promise<boolean> {
+/**
+ * The address this request arrived on, so the invitation link comes back to
+ * the same deployment that sent it. NEXT_PUBLIC_SITE_URL is the fallback
+ * rather than the source of truth: a preview deployment that trusted it would
+ * mail out links pointing at production.
+ */
+async function inviteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const proto =
+    h.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+async function isSoleTenantAdministrator(
+  tenantId: string,
+  userId: string,
+): Promise<boolean> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("edospmis_user_roles")
@@ -22,20 +44,40 @@ async function isSoleTenantAdministrator(tenantId: string, userId: string): Prom
   return admins.has(userId) && admins.size === 1;
 }
 
-export async function inviteUser(_prev: UserFormState, form: FormData): Promise<UserFormState> {
+export async function inviteUser(
+  _prev: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
   const session = await requireSession();
   if (!can(session, "admin.users.manage")) {
     return { error: "You don't have permission to manage users.", ok: null };
   }
-  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const email = String(form.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   const roleId = String(form.get("role_id") ?? "");
-  if (!email || !roleId) return { error: "Enter an email and choose a role.", ok: null };
+  if (!email || !roleId)
+    return { error: "Enter an email and choose a role.", ok: null };
 
   const admin = createAdminClient();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteUrl}/auth/callback?next=/update-password`,
-  });
+  const base = await inviteOrigin();
+
+  // `generateLink` creates the account and hands back the invitation token
+  // without sending anything, so the message is ours to send — through Resend,
+  // like sign-up and password reset already do.
+  //
+  // `inviteUserByEmail` used to do this, and that was the bug: it sends through
+  // the Supabase project's own mailer, which is a different pipe entirely from
+  // every other email this app sends. Where that mailer is unconfigured it is
+  // rate-limited to a couple of messages an hour and will not deliver to
+  // addresses outside the project's own team — so sign-up mail arrived and
+  // invitations quietly did not.
+  const { data: invited, error: inviteError } =
+    await admin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { redirectTo: `${base}/auth/callback?next=/update-password` },
+    });
 
   if (inviteError || !invited?.user) {
     const message = inviteError?.message ?? "unknown error";
@@ -48,7 +90,9 @@ export async function inviteUser(_prev: UserFormState, form: FormData): Promise<
   }
 
   const userId = invited.user.id;
-  await admin.from("edospmis_users").upsert({ id: userId, email }, { onConflict: "id" });
+  await admin
+    .from("edospmis_users")
+    .upsert({ id: userId, email }, { onConflict: "id" });
   await admin.from("edospmis_memberships").insert({
     user_id: userId,
     tenant_id: session.tenant.id,
@@ -71,11 +115,41 @@ export async function inviteUser(_prev: UserFormState, form: FormData): Promise<
     after: { email, role_id: roleId },
   });
 
+  // Sent after the membership and role are in place, so the person who clicks
+  // the link finds a workspace waiting rather than a half-built account.
+  let mailed = false;
+  const tokenHash = invited.properties?.hashed_token;
+  if (tokenHash && canSendEmail()) {
+    const link = `${base}/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=invite&next=/update-password`;
+    const sent = await sendEmail({
+      to: email,
+      ...teamInviteEmail({
+        link,
+        workspaceName: session.tenant.name,
+        invitedBy: session.user.full_name,
+      }),
+    });
+    mailed = sent.ok;
+    if (!sent.ok)
+      console.error("EDOSPMIS invitation email failed:", sent.error);
+  }
+
   revalidatePath("/app/settings/users");
-  return { error: null, ok: `Invited ${email}.` };
+  // Said plainly either way. The membership is real whether or not the message
+  // got out, and an admin who is not told otherwise will assume it arrived —
+  // then wait for somebody who never heard from us.
+  return {
+    error: null,
+    ok: mailed
+      ? `Invited ${email}.`
+      : `${email} was added, but the invitation email could not be sent. Ask them to use "Forgot your password?" on the sign-in page to set a password.`,
+  };
 }
 
-export async function updateMemberRole(_prev: UserFormState, form: FormData): Promise<UserFormState> {
+export async function updateMemberRole(
+  _prev: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
   const session = await requireSession();
   if (!can(session, "admin.users.manage")) {
     return { error: "You don't have permission to manage users.", ok: null };
@@ -86,7 +160,8 @@ export async function updateMemberRole(_prev: UserFormState, form: FormData): Pr
 
   if (await isSoleTenantAdministrator(session.tenant.id, userId)) {
     return {
-      error: "This is the only Tenant Administrator — make someone else an administrator first.",
+      error:
+        "This is the only Tenant Administrator — make someone else an administrator first.",
       ok: null,
     };
   }
@@ -106,7 +181,12 @@ export async function updateMemberRole(_prev: UserFormState, form: FormData): Pr
     .eq("scope_type", "tenant");
   const { error } = await supabase
     .from("edospmis_user_roles")
-    .insert({ user_id: userId, tenant_id: session.tenant.id, role_id: roleId, scope_type: "tenant" });
+    .insert({
+      user_id: userId,
+      tenant_id: session.tenant.id,
+      role_id: roleId,
+      scope_type: "tenant",
+    });
   if (error) return { error: "Couldn't update that member's role.", ok: null };
 
   await logAudit({
@@ -132,9 +212,13 @@ export async function setMembershipStatus(
   if (!can(session, "admin.users.manage")) {
     return { error: "You don't have permission to manage users.", ok: null };
   }
-  if (status === "suspended" && (await isSoleTenantAdministrator(session.tenant.id, userId))) {
+  if (
+    status === "suspended" &&
+    (await isSoleTenantAdministrator(session.tenant.id, userId))
+  ) {
     return {
-      error: "This is the only Tenant Administrator — make someone else an administrator first.",
+      error:
+        "This is the only Tenant Administrator — make someone else an administrator first.",
       ok: null,
     };
   }
@@ -156,7 +240,10 @@ export async function setMembershipStatus(
   });
 
   revalidatePath("/app/settings/users");
-  return { error: null, ok: status === "suspended" ? "Member suspended." : "Member reactivated." };
+  return {
+    error: null,
+    ok: status === "suspended" ? "Member suspended." : "Member reactivated.",
+  };
 }
 
 /**
@@ -172,14 +259,18 @@ export async function setMembershipStatus(
  * admin.users.manage. The check here exists to give a readable answer rather
  * than a silent no-op.
  */
-export async function setMemberPlacement(_prev: UserFormState, form: FormData): Promise<UserFormState> {
+export async function setMemberPlacement(
+  _prev: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
   const session = await requireSession();
   if (!can(session, "admin.users.manage")) {
     return { error: "You don't have permission to manage users.", ok: null };
   }
 
   const membershipId = String(form.get("membership_id") ?? "");
-  if (!membershipId) return { error: "Couldn't tell which member that was.", ok: null };
+  if (!membershipId)
+    return { error: "Couldn't tell which member that was.", ok: null };
 
   const teamId = String(form.get("team_id") ?? "") || null;
   const departmentId = String(form.get("department_id") ?? "") || null;
@@ -199,7 +290,10 @@ export async function setMemberPlacement(_prev: UserFormState, form: FormData): 
     .eq("tenant_id", session.tenant.id);
 
   if (error) {
-    return { error: "Couldn't save where this person sits. Try again.", ok: null };
+    return {
+      error: "Couldn't save where this person sits. Try again.",
+      ok: null,
+    };
   }
 
   await logAudit({
