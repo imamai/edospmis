@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
 
   // Only ever redirect to a path on this origin — an open redirect here would
   // let a crafted confirmation link bounce a freshly signed-in user offsite.
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+  const safeNext =
+    next.startsWith("/") && !next.startsWith("//") ? next : "/app";
 
   if (code) {
     const supabase = await createClient();
@@ -35,7 +36,27 @@ export async function GET(request: NextRequest) {
       type: type as "recovery" | "invite" | "email" | "signup",
       token_hash: tokenHash,
     });
-    if (!error) return NextResponse.redirect(`${origin}${safeNext}`);
+    if (!error) {
+      // A confirmation proves the address and nothing more.
+      //
+      // verifyOtp also hands back a session, so without this the link itself
+      // would sign the person in — and so would anyone else who reached that
+      // mailbox, or received the link forwarded by mistake. Dropping the
+      // session sends them to sign in with the password they chose at sign-up,
+      // which is the only thing that shows it is them.
+      //
+      // Only sign-up. A password reset and an invitation both have to arrive
+      // signed in, because the whole point of where they land is setting a
+      // password they do not have yet.
+      //
+      // The workspace is unaffected: it is provisioned at the first sign-in,
+      // not here, and the login action already does that.
+      if (type === "signup") {
+        await supabase.auth.signOut({ scope: "local" });
+        return NextResponse.redirect(`${origin}/login?confirmed=1`);
+      }
+      return NextResponse.redirect(`${origin}${safeNext}`);
+    }
   }
 
   return NextResponse.redirect(`${origin}/login?error=link_expired`);

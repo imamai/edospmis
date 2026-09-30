@@ -17,17 +17,30 @@ export function LoginForm() {
   // action re-checks, but keeping a crafted absolute URL out of the form in
   // the first place is cheaper than relying on one guard.
   const requested = params.get("next") ?? "";
-  const next = requested.startsWith("/") && !requested.startsWith("//") ? requested : "";
+  const next =
+    requested.startsWith("/") && !requested.startsWith("//") ? requested : "";
 
   // /auth/callback sends people back here when a link has been used already
   // or has expired. Without this it looked like nothing had happened at all.
   const linkExpired = params.get("error") === "link_expired";
 
+  // Straight off the confirmation link, which deliberately does not sign
+  // anyone in. Without a word here, being asked to log in right after clicking
+  // "confirm" reads as the link having failed.
+  const confirmed = params.get("confirmed") === "1";
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
 
-      <TextInput label="Email" name="email" type="email" autoComplete="email" required autoFocus />
+      <TextInput
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        autoFocus
+      />
       <TextInput
         label="Password"
         name="password"
@@ -36,12 +49,23 @@ export function LoginForm() {
         required
       />
 
+      {confirmed && !state.error && (
+        <p
+          role="status"
+          className="rounded-lg border border-good/25 bg-good-soft px-3 py-2.5 text-sm text-good"
+        >
+          Your email is confirmed. Sign in with the password you chose when you
+          signed up.
+        </p>
+      )}
+
       {linkExpired && !state.error && (
         <p
           role="alert"
           className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2.5 text-sm text-critical"
         >
-          That link has expired or has already been used. Ask for a new one below.
+          That link has expired or has already been used. Ask for a new one
+          below.
         </p>
       )}
 
