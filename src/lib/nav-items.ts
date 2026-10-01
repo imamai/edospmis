@@ -1,7 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Boxes,
   ClipboardList,
+  FileCheck2,
   FileSearch,
   FileSignature,
   Gauge,
@@ -15,6 +17,7 @@ import {
   Settings2,
   ShoppingCart,
   Sparkles,
+  Tags,
   Truck,
 } from "lucide-react";
 
@@ -89,6 +92,30 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Contracts",
         icon: FileSignature,
         requires: "legal.contract.view",
+      },
+      // What procurement sets up for itself, kept here rather than only in
+      // Settings so the whole job is reachable without leaving the group.
+      // These four are listed on the Settings page as well — the one place in
+      // the app where the same entry appears twice, deliberately, because
+      // running a tender and preparing to run one are the same person's
+      // afternoon. The two lists have to be kept in step.
+      {
+        href: "/app/settings/catalogue",
+        label: "Item catalogue",
+        icon: Boxes,
+        requires: "procurement.catalogue.manage",
+      },
+      {
+        href: "/app/settings/tender",
+        label: "Tender requirements",
+        icon: FileCheck2,
+        requires: "procurement.rfq.create",
+      },
+      {
+        href: "/app/settings/categories",
+        label: "Categories",
+        icon: Tags,
+        requires: "admin.org.manage",
       },
     ],
   },
