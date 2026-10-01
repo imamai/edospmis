@@ -2,13 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, PackageCheck } from "lucide-react";
-import { recordGrn, recordInspection, type FulfilmentState } from "../../fulfilment/actions";
+import { Plus, Trash2, PackageCheck, FileText } from "lucide-react";
+import {
+  recordGrn,
+  recordInspection,
+  type FulfilmentState,
+} from "../../fulfilment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
+import {
+  NumberInput,
+  SelectInput,
+  TextArea,
+  TextInput,
+} from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
+import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { STAGE_LABEL } from "@/lib/stage-labels";
 import { formatDate } from "@/lib/utils";
 import type { FulfilmentDetail } from "@/lib/data/fulfilment";
@@ -54,7 +64,12 @@ export function ReceivingPanel({
   const [inspectingGrn, setInspectingGrn] = useState<string | null>(null);
   const [rows, setRows] = useState<ItemRow[]>(
     poItems.length > 0
-      ? poItems.map((i, idx) => ({ id: idx + 1, description: i.description, unit: i.unit, ordered_qty: i.qty }))
+      ? poItems.map((i, idx) => ({
+          id: idx + 1,
+          description: i.description,
+          unit: i.unit,
+          ordered_qty: i.qty,
+        }))
       : [{ id: 1, description: "", unit: "", ordered_qty: 0 }],
   );
   let nextId = rows.length + 1;
@@ -95,9 +110,13 @@ export function ReceivingPanel({
   // What is still outstanding on the order, and whether this stage is still
   // the one in play.
   const orderedTotal = poItems.reduce((sum, i) => sum + i.qty, 0);
-  const receivedTotal = detail.grns.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0), 0);
+  const receivedTotal = detail.grns.reduce(
+    (sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0),
+    0,
+  );
   const fullyReceived = receivedTotal >= orderedTotal;
-  const receivingOpen = (caseStatus === "awarded" || caseStatus === "receiving") && !fullyReceived;
+  const receivingOpen =
+    (caseStatus === "awarded" || caseStatus === "receiving") && !fullyReceived;
 
   return (
     <Card raised={emphasize}>
@@ -105,48 +124,86 @@ export function ReceivingPanel({
         title="Receiving"
         subtitle="Goods received against the awarded purchase order"
         icon={emphasize ? <PackageCheck className="h-4 w-4" /> : undefined}
-        action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
+        action={
+          emphasize ? <Badge tone="brand">Current stage</Badge> : undefined
+        }
       />
       <CardBody className="flex flex-col gap-5">
         {detail.grns.map((grn) => (
           <div key={grn.id} className="rounded-lg border border-line p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-ink">{grn.grn_number}</p>
-                <p className="text-xs text-ink-faint">Received {formatDate(grn.received_at)}</p>
+                <p className="text-sm font-semibold text-ink">
+                  {grn.grn_number}
+                </p>
+                <p className="text-xs text-ink-faint">
+                  Received {formatDate(grn.received_at)}
+                </p>
               </div>
-              {grn.inspection ? (
-                <Badge
-                  tone={grn.inspection.result === "pass" ? "good" : grn.inspection.result === "fail" ? "critical" : "attention"}
+              <div className="flex items-center gap-2">
+                {grn.inspection ? (
+                  <Badge
+                    tone={
+                      grn.inspection.result === "pass"
+                        ? "good"
+                        : grn.inspection.result === "fail"
+                          ? "critical"
+                          : "attention"
+                    }
+                  >
+                    {grn.inspection.result}
+                  </Badge>
+                ) : (
+                  <Badge tone="neutral">not inspected</Badge>
+                )}
+                {/* The document a storekeeper signs and a supplier is shown in
+                    a dispute. It existed already, reachable only from a
+                    report — which is the wrong place to look for it while
+                    standing at the stores counter. */}
+                <PdfLinkButton
+                  href={`/api/export/grn/${grn.id}`}
+                  filename={grn.grn_number}
+                  title={`Goods received note ${grn.grn_number}`}
+                  className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand"
                 >
-                  {grn.inspection.result}
-                </Badge>
-              ) : (
-                <Badge tone="neutral">not inspected</Badge>
-              )}
+                  <FileText className="h-3.5 w-3.5" />
+                  PDF
+                </PdfLinkButton>
+              </div>
             </div>
 
             <div className="mt-2 flex flex-col divide-y divide-line">
               {grn.items.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 py-1.5 text-sm"
+                >
                   <span className="text-ink">{item.description}</span>
                   <div className="flex items-center gap-2">
                     <span className="tnum text-xs text-ink-faint">
                       {item.received_qty}/{item.ordered_qty} {item.unit}
                     </span>
-                    <Badge tone={CONDITION_TONE[item.condition]}>{item.condition}</Badge>
+                    <Badge tone={CONDITION_TONE[item.condition]}>
+                      {item.condition}
+                    </Badge>
                   </div>
                 </div>
               ))}
             </div>
 
             {grn.inspection?.comments && (
-              <p className="mt-2 text-xs text-ink-soft">&ldquo;{grn.inspection.comments}&rdquo;</p>
+              <p className="mt-2 text-xs text-ink-soft">
+                &ldquo;{grn.inspection.comments}&rdquo;
+              </p>
             )}
 
             {canInspect && !grn.inspection && (
               <div className="mt-3 border-t border-line pt-3">
-                <Button size="sm" variant="secondary" onClick={() => setInspectingGrn(grn.id)}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setInspectingGrn(grn.id)}
+                >
                   Record inspection
                 </Button>
               </div>
@@ -169,10 +226,25 @@ export function ReceivingPanel({
               <option value="conditional">Conditional</option>
               <option value="fail">Fail</option>
             </SelectInput>
-            <TextArea label="Comments" name="comments" rows={2} hint="Optional" />
-            <TextInput label="Evidence reference" name="evidence_ref" hint="Optional — a report number or photo filename" />
-            {inspectState.error && <p className="text-xs text-critical">{inspectState.error}</p>}
-            <ModalFormActions onCancel={() => setInspectingGrn(null)} submitLabel="Save inspection" busy={inspectPending} />
+            <TextArea
+              label="Comments"
+              name="comments"
+              rows={2}
+              hint="Optional"
+            />
+            <TextInput
+              label="Evidence reference"
+              name="evidence_ref"
+              hint="Optional — a report number or photo filename"
+            />
+            {inspectState.error && (
+              <p className="text-xs text-critical">{inspectState.error}</p>
+            )}
+            <ModalFormActions
+              onCancel={() => setInspectingGrn(null)}
+              submitLabel="Save inspection"
+              busy={inspectPending}
+            />
           </form>
         </Modal>
 
@@ -191,16 +263,38 @@ export function ReceivingPanel({
 
         {canRecord && receivingOpen && (
           <>
-            <Button size="sm" variant="secondary" onClick={() => setRecording(true)}>
-              {detail.grns.length === 0 ? "Record goods received" : "Record another delivery"}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setRecording(true)}
+            >
+              {detail.grns.length === 0
+                ? "Record goods received"
+                : "Record another delivery"}
             </Button>
-            <Modal open={recording} onClose={() => setRecording(false)} title="Record goods received" dismissible={!grnPending} size="lg">
+            <Modal
+              open={recording}
+              onClose={() => setRecording(false)}
+              title="Record goods received"
+              dismissible={!grnPending}
+              size="lg"
+            >
               <form onSubmit={submitGrn} className="flex flex-col gap-3">
                 <input type="hidden" name="case_id" value={caseId} />
                 <div className="flex items-center justify-end">
                   <button
                     type="button"
-                    onClick={() => setRows((r) => [...r, { id: nextId++, description: "", unit: "", ordered_qty: 0 }])}
+                    onClick={() =>
+                      setRows((r) => [
+                        ...r,
+                        {
+                          id: nextId++,
+                          description: "",
+                          unit: "",
+                          ordered_qty: 0,
+                        },
+                      ])
+                    }
                     className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -208,21 +302,50 @@ export function ReceivingPanel({
                   </button>
                 </div>
                 {rows.map((row, i) => (
-                  <div key={row.id} className="grid grid-cols-12 items-end gap-2">
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-12 items-end gap-2"
+                  >
                     <div className="col-span-12 sm:col-span-4">
-                      <TextInput label={i === 0 ? "Item" : ""} name="item_description" defaultValue={row.description} placeholder="e.g. Laptop, 14-inch" />
+                      <TextInput
+                        label={i === 0 ? "Item" : ""}
+                        name="item_description"
+                        defaultValue={row.description}
+                        placeholder="e.g. Laptop, 14-inch"
+                      />
                     </div>
                     <div className="col-span-3 sm:col-span-2">
-                      <TextInput label={i === 0 ? "Unit" : ""} name="item_unit" defaultValue={row.unit} placeholder="pcs" />
+                      <TextInput
+                        label={i === 0 ? "Unit" : ""}
+                        name="item_unit"
+                        defaultValue={row.unit}
+                        placeholder="pcs"
+                      />
                     </div>
                     <div className="col-span-3 sm:col-span-2">
-                      <NumberInput label={i === 0 ? "Ordered" : ""} name="item_ordered_qty" min={0} decimals defaultValue={row.ordered_qty} />
+                      <NumberInput
+                        label={i === 0 ? "Ordered" : ""}
+                        name="item_ordered_qty"
+                        min={0}
+                        decimals
+                        defaultValue={row.ordered_qty}
+                      />
                     </div>
                     <div className="col-span-3 sm:col-span-2">
-                      <NumberInput label={i === 0 ? "Received" : ""} name="item_received_qty" min={0} decimals defaultValue={row.ordered_qty} />
+                      <NumberInput
+                        label={i === 0 ? "Received" : ""}
+                        name="item_received_qty"
+                        min={0}
+                        decimals
+                        defaultValue={row.ordered_qty}
+                      />
                     </div>
                     <div className="col-span-3 sm:col-span-2">
-                      <SelectInput label={i === 0 ? "Condition" : ""} name="item_condition" defaultValue="accepted">
+                      <SelectInput
+                        label={i === 0 ? "Condition" : ""}
+                        name="item_condition"
+                        defaultValue="accepted"
+                      >
                         <option value="accepted">Accepted</option>
                         <option value="short">Short</option>
                         <option value="over">Over</option>
@@ -234,7 +357,9 @@ export function ReceivingPanel({
                       <div className="col-span-12 flex justify-end sm:col-span-1">
                         <button
                           type="button"
-                          onClick={() => setRows((r) => r.filter((x) => x.id !== row.id))}
+                          onClick={() =>
+                            setRows((r) => r.filter((x) => x.id !== row.id))
+                          }
                           aria-label="Remove item"
                           className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
                         >
@@ -245,8 +370,14 @@ export function ReceivingPanel({
                   </div>
                 ))}
                 <TextArea label="Notes" name="notes" rows={2} hint="Optional" />
-                {grnState.error && <p className="text-xs text-critical">{grnState.error}</p>}
-                <ModalFormActions onCancel={() => setRecording(false)} submitLabel="Save receipt" busy={grnPending} />
+                {grnState.error && (
+                  <p className="text-xs text-critical">{grnState.error}</p>
+                )}
+                <ModalFormActions
+                  onCancel={() => setRecording(false)}
+                  submitLabel="Save receipt"
+                  busy={grnPending}
+                />
               </form>
             </Modal>
           </>
