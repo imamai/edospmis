@@ -15,6 +15,7 @@ import {
   Settings2,
   ShoppingCart,
   Sparkles,
+  Truck,
 } from "lucide-react";
 
 export interface NavItem {
@@ -72,6 +73,16 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "My requests",
         icon: ClipboardList,
         requires: "procurement.pr.view",
+      },
+      {
+        // The one piece of configuration that lives here rather than in
+        // Settings. Inviting suppliers to quote is something a procurement
+        // officer does several times a week, not something set up once — and
+        // two clicks away is two clicks too many for that.
+        href: "/app/settings/suppliers",
+        label: "Suppliers",
+        icon: Truck,
+        requires: "procurement.supplier.manage",
       },
       {
         href: "/app/contracts",

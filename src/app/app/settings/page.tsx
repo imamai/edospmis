@@ -14,7 +14,6 @@ import {
   Settings2,
   ShieldCheck,
   Tags,
-  Truck,
   KeyRound,
   Users,
   UsersRound,
@@ -89,13 +88,6 @@ const SECTIONS: Section[] = [
           "What this organisation buys, named once, so requesters pick instead of typing. Import your price list.",
         icon: Boxes,
         requires: "procurement.catalogue.manage",
-      },
-      {
-        href: "/app/settings/suppliers",
-        label: "Suppliers",
-        blurb: "The companies you invite to quote, and their contact details.",
-        icon: Truck,
-        requires: "procurement.supplier.manage",
       },
       {
         href: "/app/settings/tender",
