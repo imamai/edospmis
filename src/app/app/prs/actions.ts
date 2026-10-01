@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +13,15 @@ import type { PRItem, Priority } from "@/lib/database.types";
 export interface PRFormState {
   error: string | null;
   ok: string | null;
+  /**
+   * The case this request opened, returned rather than redirected to.
+   *
+   * The form has files waiting in the browser that cannot be uploaded until
+   * the case exists — there is nowhere to put them before that. Redirecting
+   * from the server ended the page before they could be sent, so the id comes
+   * back instead and the form finishes the job: upload, then navigate.
+   */
+  caseId?: string;
 }
 
 export interface SimilarPR {
@@ -161,7 +169,7 @@ export async function createPR(
     return { error: "Couldn't save the request. Try again.", ok: null };
   }
 
-  redirect(`/app/cases/${newCase.id}`);
+  return { error: null, ok: "Saved as a draft.", caseId: newCase.id };
 }
 
 export async function findSimilarPRs(

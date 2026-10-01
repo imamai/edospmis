@@ -1,5 +1,10 @@
 import { requireSession, can } from "@/lib/data/session";
-import { getCategories, getClients, getPlacementOptions, getMyPlacement } from "@/lib/data/reference";
+import {
+  getCategories,
+  getClients,
+  getPlacementOptions,
+  getMyPlacement,
+} from "@/lib/data/reference";
 import { getBudgetChoices } from "@/lib/data/budgets";
 import { modelAvailable } from "@/lib/ai/suggest";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -15,19 +20,22 @@ export default async function NewPRPage() {
     );
   }
 
-  const [categories, clients, budgets, placementOptions, myPlacement] = await Promise.all([
-    getCategories(session.tenant.id),
-    getClients(session.tenant.id),
-    getBudgetChoices(session.tenant.id),
-    getPlacementOptions(session.tenant.id),
-    getMyPlacement(session.tenant.id, session.user.id),
-  ]);
+  const [categories, clients, budgets, placementOptions, myPlacement] =
+    await Promise.all([
+      getCategories(session.tenant.id),
+      getClients(session.tenant.id),
+      getBudgetChoices(session.tenant.id),
+      getPlacementOptions(session.tenant.id),
+      getMyPlacement(session.tenant.id, session.user.id),
+    ]);
 
   return (
     <div className="mx-auto max-w-3xl lg:max-w-4xl">
       <div className="mb-5">
         <h1 className="text-xl font-semibold text-ink">New request</h1>
-        <p className="mt-1 text-sm text-ink-faint">This opens a new case, tracked from here through approval.</p>
+        <p className="mt-1 text-sm text-ink-faint">
+          This opens a new case, tracked from here through approval.
+        </p>
       </div>
       <Card>
         <CardHeader title="Purchase requisition" />
@@ -39,6 +47,7 @@ export default async function NewPRPage() {
             placementOptions={placementOptions}
             myPlacement={myPlacement}
             aiAvailable={modelAvailable()}
+            tenantId={session.tenant.id}
           />
         </CardBody>
       </Card>

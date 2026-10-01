@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Boxes, Plus, Sparkles, Trash2 } from "lucide-react";
 import {
   createPR,
@@ -23,6 +24,13 @@ import { Badge } from "@/components/ui/badge";
 import { PlacementPicker } from "@/components/app/placement-picker";
 import { BudgetField } from "./budget-field";
 import { CataloguePicker, type PickedItem } from "./catalogue-picker";
+import {
+  RequestAttachments,
+  type PendingAttachment,
+} from "./request-attachments";
+import { recordAttachment } from "@/app/app/cases/[id]/attachment-actions";
+import { createClient } from "@/lib/supabase/client";
+import { ATTACHMENT_BUCKET } from "@/lib/attachment-kinds";
 import type { BudgetChoice } from "@/lib/data/budgets";
 import type {
   Category,
@@ -54,6 +62,7 @@ export function PRForm({
   placementOptions,
   myPlacement,
   aiAvailable,
+  tenantId,
 }: {
   categories: Category[];
   clients: Client[];
@@ -62,8 +71,14 @@ export function PRForm({
   /** Defaulted from the requester's own placement — most requests are for their own department. */
   myPlacement: Placement | null;
   aiAvailable: boolean;
+  /** Needed to build the storage path the attachments go to. */
+  tenantId: string;
 }) {
-  const [state, action, pending] = useActionState(createPR, initial);
+  const router = useRouter();
+  const [state, setState] = useState<PRFormState>(initial);
+  const [pending, startSave] = useTransition();
+  const [files, setFiles] = useState<PendingAttachment[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [rows, setRows] = useState<ItemRow[]>([{ id: 1 }]);
   /**
@@ -192,10 +207,90 @@ export function PRForm({
     window.setTimeout(recalcEstimate, 0);
   }
 
+  /**
+   * Save the request, then send the files it came with.
+   *
+   * In that order because an attachment belongs to a case, and the case does
+   * not exist until the request is saved — which is also why `createPR`
+   * returns an id rather than redirecting: a server redirect ended the page
+   * before anything could be uploaded.
+   *
+   * If a file fails after the request is saved, the request still exists and
+   * must not be thrown away. The failure is named, and the page stays put
+   * with a way through to the case, where it can be attached again.
+   */
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    setState(initial);
+    setProgress(null);
+
+    startSave(async () => {
+      const result = await createPR(initial, data);
+      if (result.error || !result.caseId) {
+        setState(result);
+        return;
+      }
+      const caseId = result.caseId;
+
+      const failed: string[] = [];
+      const supabase = createClient();
+
+      for (let i = 0; i < files.length; i++) {
+        const item = files[i];
+        setProgress(`Saved. Sending attachment ${i + 1} of ${files.length}…`);
+
+        const ext = item.file.name.includes(".")
+          ? item.file.name.split(".").pop()!.slice(0, 8)
+          : "bin";
+        const path = `${tenantId}/${caseId}/${crypto.randomUUID()}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(ATTACHMENT_BUCKET)
+          .upload(path, item.file, {
+            contentType: item.file.type || "application/octet-stream",
+          });
+        if (uploadError) {
+          failed.push(item.file.name);
+          continue;
+        }
+
+        const recorded = await recordAttachment({
+          caseId,
+          storagePath: path,
+          filename: item.file.name,
+          contentType: item.file.type || null,
+          byteSize: item.file.size,
+          kind: item.kind,
+          note: item.note.trim() || null,
+        });
+        if (recorded.error) {
+          // Uploaded but unreferenced — removed rather than left as something
+          // the workspace pays for and nobody can see.
+          await supabase.storage.from(ATTACHMENT_BUCKET).remove([path]);
+          failed.push(item.file.name);
+        }
+      }
+
+      setProgress(null);
+
+      if (failed.length > 0) {
+        setState({
+          error: `The request was saved, but ${failed.join(", ")} could not be attached. Open the request and try again.`,
+          ok: null,
+          caseId,
+        });
+        return;
+      }
+
+      router.push(`/app/cases/${caseId}`);
+    });
+  }
+
   return (
     <form
       ref={formRef}
-      action={action}
+      onSubmit={save}
       onInput={recalcEstimate}
       className="flex flex-col gap-5"
     >
@@ -481,12 +576,30 @@ export function PRForm({
         ))}
       </div>
 
+      <RequestAttachments
+        files={files}
+        onChange={setFiles}
+        onError={(message) => setState({ error: message, ok: null })}
+        disabled={pending}
+      />
+
       {state.error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2 text-sm text-critical"
-        >
-          {state.error}
+        <div className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2 text-sm text-critical">
+          <p role="alert">{state.error}</p>
+          {state.caseId && (
+            <Link
+              href={`/app/cases/${state.caseId}`}
+              className="mt-1 inline-block font-semibold underline"
+            >
+              Open the request
+            </Link>
+          )}
+        </div>
+      )}
+
+      {progress && (
+        <p role="status" className="text-xs text-ink-faint">
+          {progress}
         </p>
       )}
 
