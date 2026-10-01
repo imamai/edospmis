@@ -1,15 +1,22 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { updatePassword, type UpdatePasswordState } from "./actions";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/ui/field";
+import { PasswordField } from "@/components/ui/password-field";
 
 const initial: UpdatePasswordState = { error: null };
 
 export function UpdatePasswordForm() {
   const [state, action, pending] = useActionState(updatePassword, initial);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  // Only once they have typed something in the second box. Telling somebody
+  // the passwords do not match while they are still on the first character of
+  // the confirmation is just noise.
+  const mismatch = confirm.length > 0 && confirm !== password;
   // The reset link carries this; an invitation link does not.
   const resetting = useSearchParams().get("type") === "recovery";
 
@@ -25,15 +32,25 @@ export function UpdatePasswordForm() {
       </p>
 
       <form action={action} className="mt-7 flex flex-col gap-4">
-        <TextInput
+        <PasswordField
           label={resetting ? "New password" : "Password"}
           name="password"
-          type="password"
-          autoComplete="new-password"
           required
           autoFocus
           minLength={8}
           hint="At least 8 characters"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        <PasswordField
+          label={resetting ? "Confirm the new password" : "Type it again"}
+          name="password_confirm"
+          required
+          minLength={8}
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          error={mismatch ? "These don't match yet." : null}
         />
 
         {state.error && (
@@ -45,7 +62,13 @@ export function UpdatePasswordForm() {
           </p>
         )}
 
-        <Button type="submit" size="lg" busy={pending} className="w-full">
+        <Button
+          type="submit"
+          size="lg"
+          busy={pending}
+          disabled={password.length < 8 || confirm !== password}
+          className="w-full"
+        >
           {pending ? "Saving" : "Save and continue"}
         </Button>
       </form>

@@ -306,7 +306,15 @@ export const NAV_BOTTOM_ITEMS: NavItem[] = [
   // they are useful once you know where a thing lives, and this is for before
   // you know.
   { href: "/app/settings", label: "Settings", icon: Settings2 },
-  { href: "/app/settings/signature", label: "My signature", icon: PenTool },
+  // A signature appears on an approval, a purchase order or a contract.
+  // Offering one to somebody who signs none of those is clutter at best, and
+  // at worst suggests an authority they do not have.
+  {
+    href: "/app/settings/signature",
+    label: "My signature",
+    icon: PenTool,
+    requires: "signature.manage",
+  },
 ];
 
 export const NAV_ROOT_PATHS = [

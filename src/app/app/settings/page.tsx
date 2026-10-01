@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Tags,
   Truck,
+  KeyRound,
   Users,
   UsersRound,
   Wallet,
@@ -57,6 +58,26 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
+  {
+    title: "Your account",
+    blurb: "Things that are yours alone, whatever your role.",
+    entries: [
+      {
+        href: "/app/settings/password",
+        label: "Password",
+        blurb: "Change the password you sign in with.",
+        icon: KeyRound,
+      },
+      {
+        href: "/app/settings/signature",
+        label: "My signature",
+        blurb:
+          "The signature that appears when you approve or sign a document.",
+        icon: PenTool,
+        requires: "signature.manage",
+      },
+    ],
+  },
   {
     title: "Procurement setup",
     blurb: "What you buy, who you buy it from, and what a bidder must return.",
@@ -200,13 +221,6 @@ const SECTIONS: Section[] = [
         blurb: "Who acts for whom while they are away.",
         icon: Banknote,
         requires: "admin.approvals.manage",
-      },
-      {
-        href: "/app/settings/signature",
-        label: "My signature",
-        blurb:
-          "The signature that appears when you approve or sign a document.",
-        icon: PenTool,
       },
     ],
   },
