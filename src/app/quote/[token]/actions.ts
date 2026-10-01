@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notifyBySupplierToken } from "@/lib/notify/supplier-events";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface QuoteFormState {
@@ -37,6 +38,12 @@ export async function submitQuotation(
     p_supplier_phone: supplierPhone || null,
   });
   if (error) return { error: error.message };
+
+  await notifyBySupplierToken(token, {
+    kind: "quotation.received",
+    title: "a quotation is in — compare and award",
+    permission: "procurement.rfq.evaluate",
+  });
 
   revalidatePath(`/quote/${token}`);
   return { error: null };

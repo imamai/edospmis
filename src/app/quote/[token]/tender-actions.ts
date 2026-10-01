@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BID_BUCKET } from "@/lib/tender-types";
+import { notifyBySupplierToken } from "@/lib/notify/supplier-events";
 
 /**
  * The bidder's side of the tender pack.
@@ -257,6 +258,12 @@ export async function signBid(
     p_signed_ip: ip,
   });
   if (error) return { error: error.message, ok: null };
+
+  await notifyBySupplierToken(token, {
+    kind: "bid.submitted",
+    title: "a bidder has returned their documents — check them before awarding",
+    permission: "procurement.rfq.evaluate",
+  });
 
   revalidatePath(`/quote/${token}`);
   return { error: null, ok: "Submitted. Thank you." };

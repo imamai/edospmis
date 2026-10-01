@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/data/session";
 import {
+  caseContext,
   notifyRole,
   notifyUser,
   resolveNotifications,
@@ -139,6 +140,23 @@ export async function setCaseHold(
     p_reason: reason || null,
   });
   if (error) return { error: error.message, ok: null };
+
+  const holdCtx = await caseContext(caseId);
+  if (holdCtx) {
+    await notifyUser({
+      tenantId: holdCtx.tenantId,
+      userId: holdCtx.requesterId,
+      caseId,
+      kind: "case.on_hold",
+      title: onHold
+        ? `${holdCtx.caseNumber}: put on hold`
+        : `${holdCtx.caseNumber}: the hold has been lifted`,
+      body: reason || holdCtx.title || undefined,
+      href: `/app/cases/${caseId}`,
+    });
+    if (!onHold) await resolveNotifications(caseId, "case.on_hold");
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: onHold ? "Case put on hold." : "Hold released." };
 }
@@ -156,6 +174,26 @@ export async function setCaseBlocked(
     p_reason: reason || null,
   });
   if (error) return { error: error.message, ok: null };
+
+  const blockedCtx = await caseContext(caseId);
+  if (blockedCtx) {
+    // Blocked is louder than a hold: a hold is a decision somebody made here,
+    // a block is waiting on something outside the case that nobody is
+    // watching for.
+    await notifyUser({
+      tenantId: blockedCtx.tenantId,
+      userId: blockedCtx.requesterId,
+      caseId,
+      kind: "case.blocked",
+      title: blocked
+        ? `${blockedCtx.caseNumber}: blocked — it needs something from outside`
+        : `${blockedCtx.caseNumber}: unblocked and moving again`,
+      body: reason || blockedCtx.title || undefined,
+      href: `/app/cases/${caseId}`,
+    });
+    if (!blocked) await resolveNotifications(caseId, "case.blocked");
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return {
     error: null,

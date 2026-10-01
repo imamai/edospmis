@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/notify/email";
 import { shellEmail } from "@/lib/notify/auth-email";
 
@@ -41,6 +42,12 @@ export interface NotifyInput {
   blocks?: boolean;
   /** For the email only; the bell says it in the title. */
   tenantName?: string;
+  /**
+   * Caused by a supplier, who has no session for the ordinary client to run
+   * under. What changes is who is asking, not who is told: the fan-out still
+   * only reaches members of the tenant holding the permission.
+   */
+  fromSupplier?: boolean;
 }
 
 interface Recipient {
@@ -51,7 +58,9 @@ interface Recipient {
 
 export async function notifyRole(input: NotifyInput): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = input.fromSupplier
+      ? createAdminClient()
+      : await createClient();
     const { data, error } = await supabase.rpc("edospmis_notify", {
       p_tenant_id: input.tenantId,
       p_case_id: input.caseId,
@@ -107,10 +116,13 @@ export async function notifyUser(input: {
   title: string;
   body?: string;
   href: string;
+  fromSupplier?: boolean;
 }): Promise<void> {
   if (!input.userId) return;
   try {
-    const supabase = await createClient();
+    const supabase = input.fromSupplier
+      ? createAdminClient()
+      : await createClient();
     const { error } = await supabase.rpc("edospmis_notify_user", {
       p_tenant_id: input.tenantId,
       p_user_id: input.userId,
@@ -136,9 +148,10 @@ export async function notifyUser(input: {
 export async function resolveNotifications(
   caseId: string,
   kind: string,
+  fromSupplier = false,
 ): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = fromSupplier ? createAdminClient() : await createClient();
     await supabase.rpc("edospmis_resolve_notifications", {
       p_case_id: caseId,
       p_kind: kind,
@@ -168,4 +181,47 @@ export async function getInbox(limit = 20): Promise<InboxItem[]> {
     .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as InboxItem[];
+}
+
+export interface CaseContext {
+  tenantId: string;
+  caseNumber: string;
+  title: string | null;
+  requesterId: string | null;
+}
+
+/**
+ * The three things every notification needs about a case.
+ *
+ * Fetched once here rather than repeated at a dozen call sites, where the
+ * temptation is to skip the case number and write "A request needs your
+ * approval" — which tells somebody with four of them open nothing at all.
+ */
+export async function caseContext(caseId: string): Promise<CaseContext | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("edospmis_cases")
+    .select("tenant_id, case_number, edospmis_prs(title, requester_id)")
+    .eq("id", caseId)
+    .maybeSingle();
+  if (!data) return null;
+
+  const row = data as unknown as {
+    tenant_id: string;
+    case_number: string;
+    edospmis_prs:
+      | { title: string; requester_id: string }
+      | { title: string; requester_id: string }[]
+      | null;
+  };
+  const pr = Array.isArray(row.edospmis_prs)
+    ? (row.edospmis_prs[0] ?? null)
+    : row.edospmis_prs;
+
+  return {
+    tenantId: row.tenant_id,
+    caseNumber: row.case_number,
+    title: pr?.title ?? null,
+    requesterId: pr?.requester_id ?? null,
+  };
 }

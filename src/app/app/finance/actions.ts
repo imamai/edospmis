@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/data/session";
+import {
+  caseContext,
+  notifyRole,
+  notifyUser,
+  resolveNotifications,
+} from "@/lib/notify/notifications";
 import { createClient } from "@/lib/supabase/server";
 
 export interface FinanceState {
@@ -29,7 +35,10 @@ function parseInvoiceItems(form: FormData) {
   return items;
 }
 
-export async function submitInvoice(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function submitInvoice(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const caseId = String(form.get("case_id") ?? "");
   const invoiceNumber = String(form.get("invoice_number") ?? "").trim();
@@ -37,8 +46,10 @@ export async function submitInvoice(_prev: FinanceState, form: FormData): Promis
   const dueDate = String(form.get("due_date") ?? "") || null;
   const taxCents = Math.round(Math.max(0, Number(form.get("tax") ?? 0)) * 100);
   const items = parseInvoiceItems(form);
-  if (!invoiceNumber) return { error: "Enter the supplier's invoice number.", ok: null };
-  if (items.length === 0) return { error: "Add at least one line item.", ok: null };
+  if (!invoiceNumber)
+    return { error: "Enter the supplier's invoice number.", ok: null };
+  if (items.length === 0)
+    return { error: "Add at least one line item.", ok: null };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_submit_invoice", {
@@ -50,11 +61,54 @@ export async function submitInvoice(_prev: FinanceState, form: FormData): Promis
     p_due_date: dueDate,
   });
   if (error) return { error: error.message, ok: null };
+
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await resolveNotifications(caseId, "grn.recorded");
+    await notifyRole({
+      tenantId: ctx.tenantId,
+      caseId,
+      kind: "invoice.submitted",
+      title: `${ctx.caseNumber}: invoice ${invoiceNumber} needs your approval`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+      permission: "finance.invoice.approve",
+      blocks: true,
+    });
+
+    // A three-way match that did not line up is somebody's job to answer, and
+    // it is not the approver's — they cannot approve until it is settled.
+    const { count } = await supabase
+      .from("edospmis_match_exceptions")
+      .select("id, edospmis_invoices!inner(case_id)", {
+        count: "exact",
+        head: true,
+      })
+      .eq("status", "open")
+      .eq("edospmis_invoices.case_id", caseId);
+
+    if (count && count > 0) {
+      await notifyRole({
+        tenantId: ctx.tenantId,
+        caseId,
+        kind: "invoice.exception",
+        title: `${ctx.caseNumber}: invoice ${invoiceNumber} did not match — resolve or correct it`,
+        body: `${count} line${count === 1 ? "" : "s"} differ from the order or the receipt.`,
+        href: `/app/cases/${caseId}`,
+        permission: "finance.invoice.create",
+        blocks: true,
+      });
+    }
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Invoice submitted and matched." };
 }
 
-export async function resolveMatchException(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function resolveMatchException(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const exceptionId = String(form.get("exception_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
@@ -67,20 +121,45 @@ export async function resolveMatchException(_prev: FinanceState, form: FormData)
     p_resolution_note: note,
   });
   if (error) return { error: error.message, ok: null };
+  await resolveNotifications(caseId, "invoice.exception");
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Exception resolved." };
 }
 
-export async function approveInvoice(invoiceId: string, caseId: string): Promise<FinanceState> {
+export async function approveInvoice(
+  invoiceId: string,
+  caseId: string,
+): Promise<FinanceState> {
   await requireSession();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_approve_invoice", { p_invoice_id: invoiceId });
+  const { error } = await supabase.rpc("edospmis_approve_invoice", {
+    p_invoice_id: invoiceId,
+  });
   if (error) return { error: error.message, ok: null };
+
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await resolveNotifications(caseId, "invoice.submitted");
+    await notifyRole({
+      tenantId: ctx.tenantId,
+      caseId,
+      kind: "invoice.approved",
+      title: `${ctx.caseNumber}: invoice approved — release the payment`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+      permission: "finance.payment.approve",
+      blocks: true,
+    });
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Invoice approved for payment." };
 }
 
-export async function recordInvoicePayment(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function recordInvoicePayment(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const invoiceId = String(form.get("invoice_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
@@ -94,6 +173,21 @@ export async function recordInvoicePayment(_prev: FinanceState, form: FormData):
     p_payment_method: paymentMethod,
   });
   if (error) return { error: error.message, ok: null };
+
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await resolveNotifications(caseId, "invoice.approved");
+    await notifyUser({
+      tenantId: ctx.tenantId,
+      userId: ctx.requesterId,
+      caseId,
+      kind: "payment.recorded",
+      title: `${ctx.caseNumber}: the supplier has been paid`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+    });
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Payment recorded." };
 }
@@ -114,9 +208,14 @@ export interface BulkPaymentResult {
   failures: string[];
 }
 
-export async function bulkRecordPayments(invoiceIds: string[], reference: string, paymentMethod: string): Promise<BulkPaymentResult> {
+export async function bulkRecordPayments(
+  invoiceIds: string[],
+  reference: string,
+  paymentMethod: string,
+): Promise<BulkPaymentResult> {
   await requireSession();
-  if (invoiceIds.length === 0) return { paid: 0, failures: ["Select at least one invoice."] };
+  if (invoiceIds.length === 0)
+    return { paid: 0, failures: ["Select at least one invoice."] };
 
   const supabase = await createClient();
   const failures: string[] = [];
@@ -140,7 +239,10 @@ export async function bulkRecordPayments(invoiceIds: string[], reference: string
   return { paid, failures };
 }
 
-export async function setSodSettings(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function setSodSettings(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   const session = await requireSession();
   const prRule = form.get("pr_requester_not_approver") === "on";
   const receiverRule = form.get("receiver_not_payment_approver") === "on";
@@ -156,12 +258,20 @@ export async function setSodSettings(_prev: FinanceState, form: FormData): Promi
   return { error: null, ok: "Settings saved." };
 }
 
-export async function setMatchTolerances(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function setMatchTolerances(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   const session = await requireSession();
   const pct = Number(form.get("price_pct") ?? 0);
-  const flat = Math.round(Math.max(0, Number(form.get("price_amount") ?? 0)) * 100);
+  const flat = Math.round(
+    Math.max(0, Number(form.get("price_amount") ?? 0)) * 100,
+  );
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-    return { error: "A percentage tolerance has to be between 0 and 100.", ok: null };
+    return {
+      error: "A percentage tolerance has to be between 0 and 100.",
+      ok: null,
+    };
   }
 
   const supabase = await createClient();
@@ -175,14 +285,19 @@ export async function setMatchTolerances(_prev: FinanceState, form: FormData): P
   return { error: null, ok: "Tolerance saved." };
 }
 
-export async function createDelegation(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function createDelegation(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const roleId = String(form.get("role_id") ?? "");
   const toUserId = String(form.get("to_user_id") ?? "");
   const startsAt = String(form.get("starts_at") ?? "");
   const endsAt = String(form.get("ends_at") ?? "");
-  if (!roleId || !toUserId) return { error: "Choose a role and a teammate.", ok: null };
-  if (!startsAt || !endsAt) return { error: "Choose a start and end date.", ok: null };
+  if (!roleId || !toUserId)
+    return { error: "Choose a role and a teammate.", ok: null };
+  if (!startsAt || !endsAt)
+    return { error: "Choose a start and end date.", ok: null };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_create_delegation", {
@@ -196,10 +311,14 @@ export async function createDelegation(_prev: FinanceState, form: FormData): Pro
   return { error: null, ok: "Delegation created." };
 }
 
-export async function revokeDelegation(delegationId: string): Promise<FinanceState> {
+export async function revokeDelegation(
+  delegationId: string,
+): Promise<FinanceState> {
   await requireSession();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_revoke_delegation", { p_delegation_id: delegationId });
+  const { error } = await supabase.rpc("edospmis_revoke_delegation", {
+    p_delegation_id: delegationId,
+  });
   if (error) return { error: error.message, ok: null };
   revalidatePath("/app/settings/delegations");
   return { error: null, ok: "Delegation revoked." };
@@ -214,7 +333,10 @@ export async function revokeDelegation(delegationId: string): Promise<FinanceSta
  * — at that point it is a commitment somebody signed for, and the remedy is
  * to void it and enter the right one so both stay on the record.
  */
-export async function updateInvoice(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function updateInvoice(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const invoiceId = String(form.get("invoice_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
@@ -223,9 +345,12 @@ export async function updateInvoice(_prev: FinanceState, form: FormData): Promis
   const dueDate = String(form.get("due_date") ?? "") || null;
   const taxCents = Math.round(Math.max(0, Number(form.get("tax") ?? 0)) * 100);
   const items = parseInvoiceItems(form);
-  if (!invoiceId) return { error: "Couldn't tell which invoice that was.", ok: null };
-  if (!invoiceNumber) return { error: "Enter the supplier's invoice number.", ok: null };
-  if (items.length === 0) return { error: "Add at least one line item.", ok: null };
+  if (!invoiceId)
+    return { error: "Couldn't tell which invoice that was.", ok: null };
+  if (!invoiceNumber)
+    return { error: "Enter the supplier's invoice number.", ok: null };
+  if (items.length === 0)
+    return { error: "Add at least one line item.", ok: null };
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("edospmis_update_invoice", {
@@ -256,13 +381,18 @@ export async function updateInvoice(_prev: FinanceState, form: FormData): Promis
  * time by somebody who did not know about the first. Voided invoices are
  * already excluded from every cumulative total the match computes.
  */
-export async function voidInvoice(_prev: FinanceState, form: FormData): Promise<FinanceState> {
+export async function voidInvoice(
+  _prev: FinanceState,
+  form: FormData,
+): Promise<FinanceState> {
   await requireSession();
   const invoiceId = String(form.get("invoice_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
   const reason = String(form.get("reason") ?? "").trim();
-  if (!invoiceId) return { error: "Couldn't tell which invoice that was.", ok: null };
-  if (!reason) return { error: "Say why this invoice is being voided.", ok: null };
+  if (!invoiceId)
+    return { error: "Couldn't tell which invoice that was.", ok: null };
+  if (!reason)
+    return { error: "Say why this invoice is being voided.", ok: null };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_void_invoice", {

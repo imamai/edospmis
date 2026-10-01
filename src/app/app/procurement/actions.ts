@@ -6,6 +6,12 @@ import { requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/notify/email";
 import { awardEmail, rfqInviteEmail } from "@/lib/notify/auth-email";
+import {
+  caseContext,
+  notifyRole,
+  notifyUser,
+  resolveNotifications,
+} from "@/lib/notify/notifications";
 import { formatDate, formatMoney } from "@/lib/utils";
 
 export interface ProcurementState {
@@ -204,6 +210,19 @@ export async function recordQuotation(
   });
   if (error) return { error: "Couldn't save that quotation.", ok: null };
 
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await notifyRole({
+      tenantId: ctx.tenantId,
+      caseId,
+      kind: "quotation.received",
+      title: `${ctx.caseNumber}: a quotation is in — compare and award`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+      permission: "procurement.rfq.evaluate",
+    });
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Quotation recorded." };
 }
@@ -306,6 +325,51 @@ export async function awardPO(
     console.error("EDOSPMIS award notification failed:", cause);
   }
 
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await resolveNotifications(caseId, "quotation.received");
+    await resolveNotifications(caseId, "bid.submitted");
+    await resolveNotifications(caseId, "pr.approved");
+
+    const { data: po } = await supabase
+      .from("edospmis_purchase_orders")
+      .select("po_number, status")
+      .eq("rfq_id", rfqId)
+      .maybeSingle<{ po_number: string; status: string }>();
+
+    if (po?.status === "pending_approval") {
+      await notifyRole({
+        tenantId: ctx.tenantId,
+        caseId,
+        kind: "po.pending_approval",
+        title: `${ctx.caseNumber}: ${po.po_number} needs your approval before it can be issued`,
+        body: ctx.title ?? undefined,
+        href: `/app/cases/${caseId}`,
+        permission: "procurement.po.approve",
+        blocks: true,
+      });
+    } else if (po) {
+      await notifyRole({
+        tenantId: ctx.tenantId,
+        caseId,
+        kind: "po.issued",
+        title: `${ctx.caseNumber}: ${po.po_number} issued — record the goods when they arrive`,
+        body: ctx.title ?? undefined,
+        href: `/app/cases/${caseId}`,
+        permission: "receiving.grn.create",
+      });
+      await notifyUser({
+        tenantId: ctx.tenantId,
+        userId: ctx.requesterId,
+        caseId,
+        kind: "po.issued.requester",
+        title: `${ctx.caseNumber}: the order has gone to the supplier`,
+        body: ctx.title ?? undefined,
+        href: `/app/cases/${caseId}`,
+      });
+    }
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order issued." };
 }
@@ -320,6 +384,29 @@ export async function approvePO(
     p_po_id: poId,
   });
   if (error) return { error: error.message, ok: null };
+  const ctx = await caseContext(caseId);
+  if (ctx) {
+    await resolveNotifications(caseId, "po.pending_approval");
+    await notifyRole({
+      tenantId: ctx.tenantId,
+      caseId,
+      kind: "po.issued",
+      title: `${ctx.caseNumber}: the order is issued — record the goods when they arrive`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+      permission: "receiving.grn.create",
+    });
+    await notifyUser({
+      tenantId: ctx.tenantId,
+      userId: ctx.requesterId,
+      caseId,
+      kind: "po.issued.requester",
+      title: `${ctx.caseNumber}: the order has gone to the supplier`,
+      body: ctx.title ?? undefined,
+      href: `/app/cases/${caseId}`,
+    });
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order approved." };
 }
