@@ -4,11 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
-import {
-  ATTACHMENT_BUCKET,
-  signedAttachmentUrl,
-  type AttachmentKind,
-} from "@/lib/data/attachments";
+import { signedAttachmentUrl } from "@/lib/data/attachments";
+import { ATTACHMENT_BUCKET, type AttachmentKind } from "@/lib/attachment-kinds";
 
 export interface AttachmentState {
   error: string | null;

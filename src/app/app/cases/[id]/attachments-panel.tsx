@@ -16,7 +16,7 @@ import {
   ATTACHMENT_KIND_LABEL,
   type AttachmentKind,
   type CaseAttachment,
-} from "@/lib/data/attachments";
+} from "@/lib/attachment-kinds";
 import { formatDate } from "@/lib/utils";
 
 /**

@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  ATTACHMENT_BUCKET,
+  type AttachmentKind,
+  type CaseAttachment,
+} from "@/lib/attachment-kinds";
 
 /**
  * Files a requester attached to their own request.
@@ -11,40 +16,16 @@ import { createClient } from "@/lib/supabase/server";
  * once saw the link.
  */
 
-export const ATTACHMENT_BUCKET = "edospmis-attachments";
-
-export type AttachmentKind =
-  | "price_list"
-  | "quotation_received"
-  | "flyer"
-  | "specification"
-  | "photo"
-  | "other";
-
-/** Said in the requester's words, not the schema's. */
-export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
-  price_list: "Price list",
-  quotation_received: "Quote I was given",
-  flyer: "Flyer or brochure",
-  specification: "Specification",
-  photo: "Photograph",
-  other: "Other",
-};
+export {
+  ATTACHMENT_BUCKET,
+  ATTACHMENT_KIND_LABEL,
+  type AttachmentKind,
+  type CaseAttachment,
+} from "@/lib/attachment-kinds";
 
 interface Person {
   full_name: string | null;
   email: string;
-}
-
-export interface CaseAttachment {
-  id: string;
-  filename: string;
-  content_type: string | null;
-  byte_size: number | null;
-  kind: AttachmentKind;
-  note: string | null;
-  created_at: string;
-  uploaded_by_name: string | null;
 }
 
 export async function listCaseAttachments(
