@@ -255,6 +255,7 @@ export default async function CaseDetailPage({
               stages.length > 0 ? stages : [{ key: "draft", label: "Draft" }]
             }
             currentKey={c.current_stage_key}
+            complete={c.status === "closed"}
             terminal={
               c.status in TERMINAL_LABEL
                 ? { key: c.status, label: TERMINAL_LABEL[c.status] }

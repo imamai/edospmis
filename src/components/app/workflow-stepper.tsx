@@ -15,6 +15,7 @@ import type { WorkflowStageDef } from "@/lib/database.types";
 export function WorkflowStepper({
   stages,
   currentKey,
+  complete = false,
   terminal,
   stageDates,
   stageHints,
@@ -22,6 +23,14 @@ export function WorkflowStepper({
 }: {
   stages: WorkflowStageDef[];
   currentKey: string;
+  /**
+   * The case is finished, so the last stage is done rather than in progress.
+   *
+   * Without this the final stage matched `currentKey` and rendered as the
+   * current step forever: a closed case showed "Completed — in progress",
+   * which reads as a pipeline that never ends.
+   */
+  complete?: boolean;
   /** "rejected" / "returned" / "cancelled" — shown as a distinct end state, not just another step. */
   terminal?: { key: string; label: string } | null;
   /** stage_key -> ISO date the stage was entered, for a "reached {date}" caption. */
@@ -40,8 +49,11 @@ export function WorkflowStepper({
   return (
     <div className="flex items-stretch overflow-x-auto scroll-slim">
       {stages.map((stage, i) => {
-        const isDone = currentIndex >= 0 && i < currentIndex && !terminal;
-        const isCurrent = stage.key === currentKey && !terminal;
+        // On a finished case every stage is behind us, the last one included.
+        const isDone =
+          !terminal &&
+          (complete ? true : currentIndex >= 0 && i < currentIndex);
+        const isCurrent = !terminal && !complete && stage.key === currentKey;
         const isFirst = i === 0;
         const isLast = i === stages.length - 1;
         const reachedAt = stageDates?.[stage.key];
@@ -57,7 +69,9 @@ export function WorkflowStepper({
           !isFirst && "-ml-3.5",
           isDone && "bg-good text-white",
           isCurrent && "bg-brand text-white",
-          !isDone && !isCurrent && "border border-line bg-surface-sunk text-ink-faint",
+          !isDone &&
+            !isCurrent &&
+            "border border-line bg-surface-sunk text-ink-faint",
           hrefForStage && "cursor-pointer transition-opacity hover:opacity-90",
         );
         const content = (
@@ -66,17 +80,34 @@ export function WorkflowStepper({
               {isDone && <Check className="h-3 w-3 shrink-0" />}
               {stage.label}
             </span>
-            {isDone && reachedAt && <span className="text-[10px] opacity-80">reached {formatDate(reachedAt)}</span>}
-            {isCurrent && <span className="text-[10px] opacity-85">in progress</span>}
+            {isDone && reachedAt && (
+              <span className="text-[10px] opacity-80">
+                reached {formatDate(reachedAt)}
+              </span>
+            )}
+            {isCurrent && (
+              <span className="text-[10px] opacity-85">in progress</span>
+            )}
           </>
         );
 
         return hrefForStage ? (
-          <Link key={stage.key} href={hrefForStage(stage.key)} style={{ clipPath }} className={className} title={stageHints?.[stage.key]}>
+          <Link
+            key={stage.key}
+            href={hrefForStage(stage.key)}
+            style={{ clipPath }}
+            className={className}
+            title={stageHints?.[stage.key]}
+          >
             {content}
           </Link>
         ) : (
-          <div key={stage.key} style={{ clipPath }} className={className} title={stageHints?.[stage.key]}>
+          <div
+            key={stage.key}
+            style={{ clipPath }}
+            className={className}
+            title={stageHints?.[stage.key]}
+          >
             {content}
           </div>
         );
