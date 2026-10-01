@@ -73,8 +73,9 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Things you act on: raise, decide, award, sign. See the "Reports" group
-    // below for the read-only, filter-and-export view of the same domains.
+    // Things you act on: raise, decide, award, sign. The read-only view of the
+    // same domains is "Reports"; the things you set up once are the settings
+    // groups below.
     label: "Procurement",
     items: [
       {
@@ -91,24 +92,6 @@ export const NAV_GROUPS: NavGroup[] = [
         requires: "procurement.pr.view",
       },
       {
-        href: "/app/settings/catalogue",
-        label: "Item catalogue",
-        icon: Boxes,
-        requires: "procurement.catalogue.manage",
-      },
-      {
-        href: "/app/settings/suppliers",
-        label: "Suppliers",
-        icon: Truck,
-        requires: "procurement.supplier.manage",
-      },
-      {
-        href: "/app/settings/tender",
-        label: "Tender requirements",
-        icon: FileCheck2,
-        requires: "procurement.rfq.create",
-      },
-      {
         href: "/app/contracts",
         label: "Contracts",
         icon: FileSignature,
@@ -117,10 +100,9 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Things you look up: browse, filter by period/department/status,
-    // export. Every row here links back to its case workspace to actually
-    // act on it — no edit/delete lives in this group, on purpose (that stays
-    // the one place it's already permission-checked and audited).
+    // Things you look up: browse, filter by period/department/status, export.
+    // Every row links back to its case workspace to actually act on it — no
+    // edit or delete lives in this group, on purpose.
     label: "Reports",
     items: [
       {
@@ -165,14 +147,33 @@ export const NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+
+  // ── Settings, grouped by what you are setting up ──────────────────────
+  //
+  // Everything below lives under /app/settings and is indexed on the Settings
+  // page, which uses these same five headings. One taxonomy in both places:
+  // two would drift, and then neither would be trustworthy.
+
   {
-    label: "Directory",
+    label: "Procurement setup",
     items: [
       {
-        href: "/app/settings/clients",
-        label: "Clients",
-        icon: Building2,
-        requires: "crm.client.manage",
+        href: "/app/settings/catalogue",
+        label: "Item catalogue",
+        icon: Boxes,
+        requires: "procurement.catalogue.manage",
+      },
+      {
+        href: "/app/settings/suppliers",
+        label: "Suppliers",
+        icon: Truck,
+        requires: "procurement.supplier.manage",
+      },
+      {
+        href: "/app/settings/tender",
+        label: "Tender requirements",
+        icon: FileCheck2,
+        requires: "procurement.rfq.create",
       },
       {
         href: "/app/settings/categories",
@@ -183,11 +184,46 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Money & approvals",
+    items: [
+      {
+        href: "/app/settings/budgets",
+        label: "Budgets",
+        icon: Wallet,
+        requires: "admin.org.manage",
+      },
+      {
+        href: "/app/settings/approval-rules",
+        label: "Approval rules",
+        icon: Gavel,
+        requires: "admin.approvals.manage",
+      },
+      {
+        href: "/app/settings/segregation-of-duties",
+        label: "Finance controls",
+        icon: Scale,
+        requires: "admin.approvals.manage",
+      },
+      {
+        href: "/app/settings/billing",
+        label: "Billing & plan",
+        icon: CreditCard,
+        requires: "admin.org.manage",
+      },
+    ],
+  },
+  {
     label: "Organization",
     items: [
       {
+        href: "/app/settings/organization",
+        label: "Organization profile",
+        icon: Settings2,
+        requires: "admin.org.manage",
+      },
+      {
         href: "/app/settings/business-units",
-        label: "Business Units",
+        label: "Business units",
         icon: Landmark,
         requires: "admin.org.manage",
       },
@@ -210,33 +246,15 @@ export const NAV_GROUPS: NavGroup[] = [
         requires: "admin.org.manage",
       },
       {
-        href: "/app/settings/queues",
-        label: "Queues",
-        icon: ListOrdered,
-        requires: "admin.workflows.manage",
-      },
-      {
-        href: "/app/settings/budgets",
-        label: "Budgets",
-        icon: Wallet,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/organization",
-        label: "Organization Profile",
-        icon: Settings2,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/billing",
-        label: "Billing & plan",
-        icon: CreditCard,
-        requires: "admin.org.manage",
+        href: "/app/settings/clients",
+        label: "Clients",
+        icon: Building2,
+        requires: "crm.client.manage",
       },
     ],
   },
   {
-    label: "Admin",
+    label: "People & access",
     items: [
       {
         href: "/app/settings/users",
@@ -251,22 +269,21 @@ export const NAV_GROUPS: NavGroup[] = [
         requires: "admin.roles.manage",
       },
       {
-        href: "/app/settings/approval-rules",
-        label: "Approval Rules",
-        icon: Gavel,
-        requires: "admin.approvals.manage",
-      },
-      {
-        href: "/app/settings/segregation-of-duties",
-        label: "Finance controls",
-        icon: Scale,
-        requires: "admin.approvals.manage",
-      },
-      {
         href: "/app/settings/delegations",
         label: "Delegations",
         icon: UserCog,
         requires: "admin.approvals.manage",
+      },
+    ],
+  },
+  {
+    label: "Workflow & integrations",
+    items: [
+      {
+        href: "/app/settings/queues",
+        label: "Queues",
+        icon: ListOrdered,
+        requires: "admin.workflows.manage",
       },
       {
         href: "/app/settings/webhooks",
@@ -285,6 +302,10 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Ungrouped, always visible, rendered just above sign-out. */
 export const NAV_BOTTOM_ITEMS: NavItem[] = [
+  // One way in to everything configurable. The groups above stay as they are:
+  // they are useful once you know where a thing lives, and this is for before
+  // you know.
+  { href: "/app/settings", label: "Settings", icon: Settings2 },
   { href: "/app/settings/signature", label: "My signature", icon: PenTool },
 ];
 
