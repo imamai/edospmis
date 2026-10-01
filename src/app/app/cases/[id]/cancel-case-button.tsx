@@ -30,7 +30,13 @@ export function CancelCaseButton({ caseId }: { caseId: string }) {
       <Button variant="ghost" onClick={() => setOpen(true)}>
         Cancel case
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Cancel this case" dismissible={!pending} size="sm">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Cancel this case"
+        dismissible={!pending}
+        size="sm"
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -46,7 +52,12 @@ export function CancelCaseButton({ caseId }: { caseId: string }) {
             onChange={(e) => setReason(e.target.value)}
           />
           {error && <p className="text-xs text-critical">{error}</p>}
-          <ModalFormActions onCancel={() => setOpen(false)} submitLabel="Confirm cancel" busy={pending} danger />
+          <ModalFormActions
+            onCancel={() => setOpen(false)}
+            submitLabel="Confirm cancel"
+            busy={pending}
+            danger
+          />
         </form>
       </Modal>
     </>

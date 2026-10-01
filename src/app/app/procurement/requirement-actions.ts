@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
+import { signedBidDocumentUrl } from "@/lib/data/tender";
 
 export interface RequirementState {
   error: string | null;
@@ -122,4 +123,22 @@ export async function setRfqRequirements(
         ? "This tender now asks for nothing beyond a price."
         : `Bidders must return ${rows.length} item${rows.length === 1 ? "" : "s"}.`,
   };
+}
+
+/**
+ * A short-lived link to one bid document, for an evaluator.
+ *
+ * Scoped by tenant on the way in, so an id guessed from another workspace
+ * returns nothing rather than a working link to somebody else's CR12.
+ */
+export async function openBidDocument(
+  documentId: string,
+): Promise<string | null> {
+  const session = await requireSession();
+  if (
+    !can(session, "procurement.rfq.evaluate") &&
+    !can(session, "procurement.rfq.view")
+  )
+    return null;
+  return signedBidDocumentUrl(session.tenant.id, documentId);
 }

@@ -34,6 +34,8 @@ import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
+import { BidReviewList } from "./bid-review";
+import type { BidReview } from "@/lib/data/tender";
 import type {
   ProcurementTemplate,
   RfqRequirement,
@@ -63,6 +65,7 @@ export function ProcurementPanel({
   templates,
   requirements,
   requirementsLocked,
+  bids,
 }: {
   detail: ProcurementDetail;
   suppliers: Supplier[];
@@ -75,6 +78,8 @@ export function ProcurementPanel({
   requirements: RfqRequirement[];
   /** A bid is in, so what this tender asks for can no longer change. */
   requirementsLocked: boolean;
+  /** What each bidder returned, for the evaluation. */
+  bids: BidReview[];
 }) {
   const router = useRouter();
   const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
@@ -323,6 +328,22 @@ export function ProcurementPanel({
           current={requirements}
           locked={requirementsLocked}
           canEdit={canInvite}
+        />
+
+        {/* Read beside the quotations, because the documents and the price are
+            weighed together — and an award refused over a missing CR12 needs
+            that CR12 to be visibly missing. */}
+        <BidReviewList
+          reviews={bids}
+          names={Object.fromEntries([
+            ...invites.map((i) => [
+              i.supplier_id,
+              i.invite_name ??
+                suppliers.find((s) => s.id === i.supplier_id)?.name ??
+                "Supplier",
+            ]),
+            ...quotations.map((q) => [q.supplier_id, q.supplier_name]),
+          ])}
         />
 
         {canInvite && (

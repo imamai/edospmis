@@ -27,7 +27,9 @@ export function ApprovalPanel({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(decideApproval, initial);
-  const [decision, setDecision] = useState<"approved" | "rejected" | "returned" | null>(null);
+  const [decision, setDecision] = useState<
+    "approved" | "rejected" | "returned" | null
+  >(null);
 
   // A successful decision closes the dialog. Derived rather than stored, so
   // there is no second render that has to un-set it — the old version cleared
@@ -40,16 +42,27 @@ export function ApprovalPanel({
 
   return (
     <Card raised>
-      <CardHeader title="Your decision" subtitle={`Waiting on the ${roleName} role`} />
+      <CardHeader
+        title="Your decision"
+        subtitle={`Waiting on the ${roleName} role`}
+      />
       <CardBody>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => setDecision("approved")}>
             Approve
           </Button>
-          <Button type="button" variant="secondary" onClick={() => setDecision("returned")}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDecision("returned")}
+          >
             Return for correction
           </Button>
-          <Button type="button" variant="danger" onClick={() => setDecision("rejected")}>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => setDecision("rejected")}
+          >
             Reject
           </Button>
         </div>
@@ -68,13 +81,19 @@ export function ApprovalPanel({
 
             {(openDecision === "rejected" || openDecision === "returned") && (
               <TextArea
-                label={openDecision === "rejected" ? "Why is this being rejected?" : "What needs correcting?"}
+                label={
+                  openDecision === "rejected"
+                    ? "Why is this being rejected?"
+                    : "What needs correcting?"
+                }
                 name="comment"
                 required
                 autoFocus
               />
             )}
-            {openDecision === "approved" && <TextArea label="Comment" name="comment" hint="Optional" />}
+            {openDecision === "approved" && (
+              <TextArea label="Comment" name="comment" hint="Optional" />
+            )}
 
             {state.error && (
               <p role="alert" className="text-xs text-critical">

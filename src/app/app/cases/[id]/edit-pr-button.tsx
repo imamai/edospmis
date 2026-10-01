@@ -6,7 +6,12 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { updatePR, type PRFormState } from "../../prs/actions";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
-import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
+import {
+  NumberInput,
+  SelectInput,
+  TextArea,
+  TextInput,
+} from "@/components/ui/field";
 import type { Category, Client, PR, Priority } from "@/lib/database.types";
 
 const initial: PRFormState = { error: null, ok: null };
@@ -45,7 +50,13 @@ export function EditPrButton({
 
   const [rows, setRows] = useState<ItemRow[]>(
     pr.items.length > 0
-      ? pr.items.map((i, idx) => ({ id: idx + 1, description: i.description, qty: i.qty, unit: i.unit, unitCost: i.estimated_unit_cost_cents / 100 }))
+      ? pr.items.map((i, idx) => ({
+          id: idx + 1,
+          description: i.description,
+          qty: i.qty,
+          unit: i.unit,
+          unitCost: i.estimated_unit_cost_cents / 100,
+        }))
       : [{ id: 1, description: "", qty: 1, unit: "", unitCost: 0 }],
   );
   let nextId = rows.length + 1;
@@ -72,14 +83,30 @@ export function EditPrButton({
         <Pencil className="h-4 w-4" />
         Edit request
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Edit request" dismissible={!pending} size="lg">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Edit request"
+        dismissible={!pending}
+        size="lg"
+      >
         <form onSubmit={submit} className="flex flex-col gap-4">
           <input type="hidden" name="pr_id" value={pr.id} />
           <input type="hidden" name="case_id" value={caseId} />
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextInput label="Title" name="title" required defaultValue={pr.title} />
-            <SelectInput label="Category" name="category_id" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <TextInput
+              label="Title"
+              name="title"
+              required
+              defaultValue={pr.title}
+            />
+            <SelectInput
+              label="Category"
+              name="category_id"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
               <option value="">Not set</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -90,7 +117,13 @@ export function EditPrButton({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <SelectInput label="Client" name="client_id" value={clientId} onChange={(e) => setClientId(e.target.value)} hint="Optional">
+            <SelectInput
+              label="Client"
+              name="client_id"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              hint="Optional"
+            >
               <option value="">Not set</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -98,23 +131,51 @@ export function EditPrButton({
                 </option>
               ))}
             </SelectInput>
-            <SelectInput label="Priority" name="priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+            <SelectInput
+              label="Priority"
+              name="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as Priority)}
+            >
               <option value="low">Low</option>
               <option value="normal">Normal</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
             </SelectInput>
-            <TextInput label="Required by" name="required_by" type="date" defaultValue={pr.required_by ?? ""} hint="Optional" />
+            <TextInput
+              label="Required by"
+              name="required_by"
+              type="date"
+              defaultValue={pr.required_by ?? ""}
+              hint="Optional"
+            />
           </div>
 
-          <TextArea label="Justification" name="justification" rows={2} defaultValue={pr.justification ?? ""} hint="Optional" />
+          <TextArea
+            label="Justification"
+            name="justification"
+            rows={2}
+            defaultValue={pr.justification ?? ""}
+            hint="Optional"
+          />
 
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-ink">Items</p>
               <button
                 type="button"
-                onClick={() => setRows((r) => [...r, { id: nextId++, description: "", qty: 1, unit: "", unitCost: 0 }])}
+                onClick={() =>
+                  setRows((r) => [
+                    ...r,
+                    {
+                      id: nextId++,
+                      description: "",
+                      qty: 1,
+                      unit: "",
+                      unitCost: 0,
+                    },
+                  ])
+                }
                 className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -122,24 +183,51 @@ export function EditPrButton({
               </button>
             </div>
             {rows.map((row, i) => (
-              <div key={row.id} className="grid grid-cols-12 items-end gap-2 rounded-lg border border-line p-3">
+              <div
+                key={row.id}
+                className="grid grid-cols-12 items-end gap-2 rounded-lg border border-line p-3"
+              >
                 <div className="col-span-12 sm:col-span-5">
-                  <TextInput label={i === 0 ? "Description" : ""} name="item_description" defaultValue={row.description} placeholder="e.g. Laptop, 14-inch" />
+                  <TextInput
+                    label={i === 0 ? "Description" : ""}
+                    name="item_description"
+                    defaultValue={row.description}
+                    placeholder="e.g. Laptop, 14-inch"
+                  />
                 </div>
                 <div className="col-span-4 sm:col-span-2">
-                  <NumberInput label={i === 0 ? "Qty" : ""} name="item_qty" min={0} decimals defaultValue={row.qty} />
+                  <NumberInput
+                    label={i === 0 ? "Qty" : ""}
+                    name="item_qty"
+                    min={0}
+                    decimals
+                    defaultValue={row.qty}
+                  />
                 </div>
                 <div className="col-span-4 sm:col-span-2">
-                  <TextInput label={i === 0 ? "Unit" : ""} name="item_unit" defaultValue={row.unit} placeholder="pcs" />
+                  <TextInput
+                    label={i === 0 ? "Unit" : ""}
+                    name="item_unit"
+                    defaultValue={row.unit}
+                    placeholder="pcs"
+                  />
                 </div>
                 <div className="col-span-3 sm:col-span-2">
-                  <NumberInput label={i === 0 ? "Cost each" : ""} name="item_cost" min={0} decimals defaultValue={row.unitCost} />
+                  <NumberInput
+                    label={i === 0 ? "Cost each" : ""}
+                    name="item_cost"
+                    min={0}
+                    decimals
+                    defaultValue={row.unitCost}
+                  />
                 </div>
                 <div className="col-span-1 flex justify-end">
                   {rows.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => setRows((r) => r.filter((x) => x.id !== row.id))}
+                      onClick={() =>
+                        setRows((r) => r.filter((x) => x.id !== row.id))
+                      }
                       aria-label="Remove item"
                       className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
                     >
@@ -151,8 +239,14 @@ export function EditPrButton({
             ))}
           </div>
 
-          {state.error && <p className="text-xs text-critical">{state.error}</p>}
-          <ModalFormActions onCancel={() => setOpen(false)} submitLabel="Save changes" busy={pending} />
+          {state.error && (
+            <p className="text-xs text-critical">{state.error}</p>
+          )}
+          <ModalFormActions
+            onCancel={() => setOpen(false)}
+            submitLabel="Save changes"
+            busy={pending}
+          />
         </form>
       </Modal>
     </>

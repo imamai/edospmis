@@ -9,7 +9,7 @@ import { getFulfilmentDetail } from "@/lib/data/fulfilment";
 import { getFinanceDetail } from "@/lib/data/finance";
 import { listCaseAttachments } from "@/lib/data/attachments";
 import {
-  listBidSubmissions,
+  getBidReview,
   listDocTypes,
   listRfqRequirements,
   listTemplates,
@@ -104,7 +104,7 @@ export default async function CaseDetailPage({
         listDocTypes(session.tenant.id),
         listTemplates(session.tenant.id),
         listRfqRequirements(session.tenant.id, rfqId),
-        listBidSubmissions(session.tenant.id, rfqId),
+        getBidReview(session.tenant.id, rfqId),
       ])
     : [[], [], [], []];
 
@@ -482,6 +482,7 @@ export default async function CaseDetailPage({
           templates={templates}
           requirements={requirements}
           requirementsLocked={bids.length > 0}
+          bids={bids}
         />
       )}
 

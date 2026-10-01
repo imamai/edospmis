@@ -249,3 +249,120 @@ export async function bidPackByToken(token: string): Promise<BidPack | null> {
   if (error || !data) return null;
   return data as BidPack;
 }
+
+export interface BidReviewDocument {
+  id: string;
+  /** The requirement it answers, or null for something sent unasked. */
+  requirement: string | null;
+  filename: string;
+  byte_size: number | null;
+  note: string | null;
+}
+
+export interface BidReview {
+  supplier_id: string;
+  submission_id: string;
+  version: number;
+  signed_name: string | null;
+  signed_position: string | null;
+  signed_at: string | null;
+  content_hash: string | null;
+  documents: BidReviewDocument[];
+  templates: { name: string; filename: string | null }[];
+  /** Mandatory requirements this bidder has not returned. Empty means complete. */
+  outstanding: string[];
+}
+
+/**
+ * What each bidder actually sent back, for the evaluation.
+ *
+ * Without this the pack was write-only: a supplier could upload a CR12 and
+ * nobody on the buying side could see it, which makes the gate feel arbitrary
+ * — an award refused for a missing document nobody can confirm is missing.
+ *
+ * `outstanding` comes from the same function the award gate uses, so what an
+ * evaluator reads here and what the gate enforces cannot drift apart.
+ */
+export async function getBidReview(
+  tenantId: string,
+  rfqId: string,
+): Promise<BidReview[]> {
+  const submissions = await listBidSubmissions(tenantId, rfqId);
+  if (submissions.length === 0) return [];
+
+  const supabase = await createClient();
+  const ids = submissions.map((s) => s.submission_id);
+
+  const [{ data: docs }, { data: tpls }] = await Promise.all([
+    supabase
+      .from("edospmis_bid_documents")
+      .select(
+        "id, submission_id, filename, byte_size, note, edospmis_supplier_doc_types(name)",
+      )
+      .in("submission_id", ids),
+    supabase
+      .from("edospmis_bid_template_responses")
+      .select("submission_id, filename, edospmis_procurement_templates(name)")
+      .in("submission_id", ids),
+  ]);
+
+  const one = <T>(v: T | T[] | null | undefined): T | null =>
+    Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+
+  const outstanding = await Promise.all(
+    submissions.map(async (s) =>
+      (await bidOutstanding(rfqId, s.supplier_id)).filter(
+        (o) => o.is_mandatory,
+      ),
+    ),
+  );
+
+  return submissions.map((s, i) => ({
+    supplier_id: s.supplier_id,
+    submission_id: s.submission_id,
+    version: s.version,
+    signed_name: s.signed_name,
+    signed_position: s.signed_position,
+    signed_at: s.signed_at,
+    content_hash: s.content_hash,
+    documents: (docs ?? [])
+      .filter(
+        (d) =>
+          (d as { submission_id: string }).submission_id === s.submission_id,
+      )
+      .map((d) => {
+        const row = d as unknown as {
+          id: string;
+          filename: string;
+          byte_size: number | null;
+          note: string | null;
+          edospmis_supplier_doc_types:
+            { name: string } | { name: string }[] | null;
+        };
+        return {
+          id: row.id,
+          requirement: one(row.edospmis_supplier_doc_types)?.name ?? null,
+          filename: row.filename,
+          byte_size: row.byte_size,
+          note: row.note,
+        };
+      }),
+    templates: (tpls ?? [])
+      .filter(
+        (t) =>
+          (t as { submission_id: string }).submission_id === s.submission_id,
+      )
+      .map((t) => {
+        const row = t as unknown as {
+          filename: string | null;
+          edospmis_procurement_templates:
+            { name: string } | { name: string }[] | null;
+        };
+        return {
+          name: one(row.edospmis_procurement_templates)?.name ?? "Form",
+          filename: row.filename,
+        };
+      }),
+    outstanding: outstanding[i].map((o) => o.label),
+  }));
+}

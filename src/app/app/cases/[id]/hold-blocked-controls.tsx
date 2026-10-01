@@ -34,7 +34,10 @@ export function HoldBlockedControls({
 
   function toggle(kind: "hold" | "blocked", next: boolean, withReason: string) {
     start(async () => {
-      const result = kind === "hold" ? await setCaseHold(caseId, next, withReason) : await setCaseBlocked(caseId, next, withReason);
+      const result =
+        kind === "hold"
+          ? await setCaseHold(caseId, next, withReason)
+          : await setCaseBlocked(caseId, next, withReason);
       if (result.error) setError(result.error);
       else {
         setPrompt(null);
@@ -65,20 +68,38 @@ export function HoldBlockedControls({
 
       <div className="flex flex-wrap gap-2">
         {onHold ? (
-          <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("hold", false, "")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            busy={pending}
+            onClick={() => toggle("hold", false, "")}
+          >
             Release hold
           </Button>
         ) : (
-          <Button size="sm" variant="secondary" onClick={() => setPrompt("hold")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setPrompt("hold")}
+          >
             Put on hold
           </Button>
         )}
         {blocked ? (
-          <Button size="sm" variant="secondary" busy={pending} onClick={() => toggle("blocked", false, "")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            busy={pending}
+            onClick={() => toggle("blocked", false, "")}
+          >
             Clear blocked
           </Button>
         ) : (
-          <Button size="sm" variant="secondary" onClick={() => setPrompt("blocked")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setPrompt("blocked")}
+          >
             Mark blocked
           </Button>
         )}
@@ -105,7 +126,11 @@ export function HoldBlockedControls({
             onChange={(e) => setReason(e.target.value)}
           />
           {error && <p className="text-xs text-critical">{error}</p>}
-          <ModalFormActions onCancel={() => setPrompt(null)} submitLabel="Confirm" busy={pending} />
+          <ModalFormActions
+            onCancel={() => setPrompt(null)}
+            submitLabel="Confirm"
+            busy={pending}
+          />
         </form>
       </Modal>
     </div>

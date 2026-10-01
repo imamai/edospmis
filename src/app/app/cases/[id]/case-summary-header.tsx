@@ -24,16 +24,19 @@ export function CaseSummaryHeader({
    * hydration mismatch waiting to happen the moment this becomes interactive. */
   daysOpen: number;
 }) {
-
   return (
     <div className="sticky top-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur-sm sm:-mx-6 sm:px-6">
       <div className="flex min-w-0 items-baseline gap-2">
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-faint">{caseNumber}</span>
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          {caseNumber}
+        </span>
         <span className="truncate text-sm font-medium text-ink">{title}</span>
       </div>
       <div className="flex items-center gap-3 text-xs text-ink-faint">
         {requesterName && <span>{requesterName}</span>}
-        <span className="tnum font-medium text-ink-soft">{formatMoney(amountCents, { currency })}</span>
+        <span className="tnum font-medium text-ink-soft">
+          {formatMoney(amountCents, { currency })}
+        </span>
         <span>{daysOpen === 0 ? "opened today" : `${daysOpen}d open`}</span>
         <Badge tone={statusTone}>{status}</Badge>
       </div>

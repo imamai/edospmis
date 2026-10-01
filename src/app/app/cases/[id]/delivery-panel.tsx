@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Send } from "lucide-react";
-import { dispatchDelivery, scheduleDelivery, confirmDelivery, type FulfilmentState } from "../../fulfilment/actions";
+import {
+  dispatchDelivery,
+  scheduleDelivery,
+  confirmDelivery,
+  type FulfilmentState,
+} from "../../fulfilment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +18,10 @@ import { formatDate } from "@/lib/utils";
 import type { Delivery, DeliveryStatus } from "@/lib/database.types";
 
 const initial: FulfilmentState = { error: null, ok: null };
-const STATUS_TONE: Record<DeliveryStatus, "neutral" | "info" | "good" | "critical"> = {
+const STATUS_TONE: Record<
+  DeliveryStatus,
+  "neutral" | "info" | "good" | "critical"
+> = {
   scheduled: "info",
   dispatched: "info",
   delivered: "good",
@@ -88,24 +96,42 @@ export function DeliveryPanel({
         title="Delivery"
         subtitle="Final handover or service completion to the client"
         icon={emphasize ? <Send className="h-4 w-4" /> : undefined}
-        action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
+        action={
+          emphasize ? <Badge tone="brand">Current stage</Badge> : undefined
+        }
       />
       <CardBody className="flex flex-col gap-4">
         {delivery && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3">
             <div>
               <div className="flex items-center gap-2">
-                <Badge tone={STATUS_TONE[delivery.status]}>{delivery.status}</Badge>
-                {delivery.scheduled_at && <p className="text-xs text-ink-faint">Scheduled {formatDate(delivery.scheduled_at)}</p>}
+                <Badge tone={STATUS_TONE[delivery.status]}>
+                  {delivery.status}
+                </Badge>
+                {delivery.scheduled_at && (
+                  <p className="text-xs text-ink-faint">
+                    Scheduled {formatDate(delivery.scheduled_at)}
+                  </p>
+                )}
               </div>
-              {delivery.dispatched_at && <p className="mt-1 text-xs text-ink-faint">Dispatched {formatDate(delivery.dispatched_at)}</p>}
+              {delivery.dispatched_at && (
+                <p className="mt-1 text-xs text-ink-faint">
+                  Dispatched {formatDate(delivery.dispatched_at)}
+                </p>
+              )}
               {delivery.client_confirmed_at && (
                 <p className="mt-1 text-xs text-ink-faint">
                   Confirmed {formatDate(delivery.client_confirmed_at)}
-                  {delivery.proof_type && delivery.proof_type !== "none" ? ` · ${delivery.proof_type}${delivery.proof_ref ? ` (${delivery.proof_ref})` : ""}` : ""}
+                  {delivery.proof_type && delivery.proof_type !== "none"
+                    ? ` · ${delivery.proof_type}${delivery.proof_ref ? ` (${delivery.proof_ref})` : ""}`
+                    : ""}
                 </p>
               )}
-              {delivery.notes && <p className="mt-1 text-xs text-ink-soft">&ldquo;{delivery.notes}&rdquo;</p>}
+              {delivery.notes && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  &ldquo;{delivery.notes}&rdquo;
+                </p>
+              )}
             </div>
 
             {canDispatch && delivery.status === "scheduled" && (
@@ -113,7 +139,9 @@ export function DeliveryPanel({
                 <Button size="sm" busy={dispatchPending} onClick={dispatch}>
                   Mark dispatched
                 </Button>
-                {dispatchError && <p className="text-xs text-critical">{dispatchError}</p>}
+                {dispatchError && (
+                  <p className="text-xs text-critical">{dispatchError}</p>
+                )}
               </div>
             )}
           </div>
@@ -121,23 +149,47 @@ export function DeliveryPanel({
 
         {canComplete && delivery && delivery.status === "dispatched" && (
           <>
-            <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setConfirming(true)}
+            >
               Confirm delivered
             </Button>
-            <Modal open={confirming} onClose={() => setConfirming(false)} title="Confirm delivery" dismissible={!confirmPending} size="sm">
+            <Modal
+              open={confirming}
+              onClose={() => setConfirming(false)}
+              title="Confirm delivery"
+              dismissible={!confirmPending}
+              size="sm"
+            >
               <form onSubmit={submitConfirm} className="flex flex-col gap-3">
                 <input type="hidden" name="delivery_id" value={delivery.id} />
                 <input type="hidden" name="case_id" value={caseId} />
-                <SelectInput label="Proof of delivery" name="proof_type" defaultValue="none">
+                <SelectInput
+                  label="Proof of delivery"
+                  name="proof_type"
+                  defaultValue="none"
+                >
                   <option value="none">None</option>
                   <option value="signature">Signature</option>
                   <option value="photo">Photo</option>
                   <option value="otp">OTP</option>
                 </SelectInput>
-                <TextInput label="Reference" name="proof_ref" hint="Optional — a signee name, photo filename or OTP code" />
+                <TextInput
+                  label="Reference"
+                  name="proof_ref"
+                  hint="Optional — a signee name, photo filename or OTP code"
+                />
                 <TextArea label="Notes" name="notes" rows={2} hint="Optional" />
-                {confirmState.error && <p className="text-xs text-critical">{confirmState.error}</p>}
-                <ModalFormActions onCancel={() => setConfirming(false)} submitLabel="Confirm delivered" busy={confirmPending} />
+                {confirmState.error && (
+                  <p className="text-xs text-critical">{confirmState.error}</p>
+                )}
+                <ModalFormActions
+                  onCancel={() => setConfirming(false)}
+                  submitLabel="Confirm delivered"
+                  busy={confirmPending}
+                />
               </form>
             </Modal>
           </>
@@ -145,7 +197,11 @@ export function DeliveryPanel({
 
         {canAssign && (!delivery || delivery.status === "scheduled") && (
           <>
-            <Button size="sm" variant="secondary" onClick={() => setScheduling(true)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setScheduling(true)}
+            >
               {delivery ? "Reschedule" : "Schedule delivery"}
             </Button>
             <Modal
@@ -162,13 +218,27 @@ export function DeliveryPanel({
                   name="scheduled_at"
                   type="datetime-local"
                   required
-                  defaultValue={delivery?.scheduled_at ? delivery.scheduled_at.slice(0, 16) : undefined}
+                  defaultValue={
+                    delivery?.scheduled_at
+                      ? delivery.scheduled_at.slice(0, 16)
+                      : undefined
+                  }
                 />
-                <TextArea label="Notes" name="notes" rows={2} hint="Optional" defaultValue={delivery?.notes ?? ""} />
-                {scheduleState.error && <p className="text-xs text-critical">{scheduleState.error}</p>}
+                <TextArea
+                  label="Notes"
+                  name="notes"
+                  rows={2}
+                  hint="Optional"
+                  defaultValue={delivery?.notes ?? ""}
+                />
+                {scheduleState.error && (
+                  <p className="text-xs text-critical">{scheduleState.error}</p>
+                )}
                 <ModalFormActions
                   onCancel={() => setScheduling(false)}
-                  submitLabel={delivery ? "Update schedule" : "Schedule delivery"}
+                  submitLabel={
+                    delivery ? "Update schedule" : "Schedule delivery"
+                  }
                   busy={schedulePending}
                 />
               </form>

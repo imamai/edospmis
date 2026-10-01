@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { submitPR } from "../../prs/actions";
 import { Button } from "@/components/ui/button";
 
-export function SubmitButton({ caseId, prId }: { caseId: string; prId: string }) {
+export function SubmitButton({
+  caseId,
+  prId,
+}: {
+  caseId: string;
+  prId: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);

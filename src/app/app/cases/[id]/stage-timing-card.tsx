@@ -21,15 +21,25 @@ export function StageTimingCard({ durations }: { durations: StageDuration[] }) {
 
   return (
     <Card>
-      <CardHeader title="Time in each stage" subtitle="How long this case has spent at every step so far" />
+      <CardHeader
+        title="Time in each stage"
+        subtitle="How long this case has spent at every step so far"
+      />
       <CardBody className="flex flex-col divide-y divide-line">
         {durations.map((d, i) => {
           const isCurrent = i === durations.length - 1 && !d.left_at;
           return (
-            <div key={`${d.stage_key}-${d.entered_at}`} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-              <p className="text-sm text-ink">{STAGE_LABEL[d.stage_key] ?? d.stage_key}</p>
+            <div
+              key={`${d.stage_key}-${d.entered_at}`}
+              className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+            >
+              <p className="text-sm text-ink">
+                {STAGE_LABEL[d.stage_key] ?? d.stage_key}
+              </p>
               <div className="flex items-center gap-2">
-                <span className="tnum text-sm font-medium text-ink-soft">{formatDuration(d.minutes)}</span>
+                <span className="tnum text-sm font-medium text-ink-soft">
+                  {formatDuration(d.minutes)}
+                </span>
                 {isCurrent && <Badge tone="info">in progress</Badge>}
               </div>
             </div>

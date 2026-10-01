@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
 
-export function CloseCaseButton({ caseId, nudge }: { caseId: string; nudge?: string | null }) {
+export function CloseCaseButton({
+  caseId,
+  nudge,
+}: {
+  caseId: string;
+  nudge?: string | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -30,7 +36,13 @@ export function CloseCaseButton({ caseId, nudge }: { caseId: string; nudge?: str
       <Button variant="secondary" onClick={() => setOpen(true)}>
         Close case
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Close this case" dismissible={!pending} size="sm">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Close this case"
+        dismissible={!pending}
+        size="sm"
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -47,7 +59,11 @@ export function CloseCaseButton({ caseId, nudge }: { caseId: string; nudge?: str
             onChange={(e) => setReason(e.target.value)}
           />
           {error && <p className="text-xs text-critical">{error}</p>}
-          <ModalFormActions onCancel={() => setOpen(false)} submitLabel="Confirm close" busy={pending} />
+          <ModalFormActions
+            onCancel={() => setOpen(false)}
+            submitLabel="Confirm close"
+            busy={pending}
+          />
         </form>
       </Modal>
     </>
