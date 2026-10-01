@@ -34,7 +34,7 @@ import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
-import { BidReviewList } from "./bid-review";
+import { ResponsesTable, type ResponseRow } from "./responses-table";
 import { WorkflowStepper } from "@/components/app/workflow-stepper";
 import type { BidReview } from "@/lib/data/tender";
 import type {
@@ -143,6 +143,60 @@ export function ProcurementPanel({
     step === s
       ? "rounded-lg ring-2 ring-brand/30 ring-offset-2 ring-offset-surface"
       : "";
+
+  /**
+   * One row per supplier who was asked, whether or not they answered.
+   *
+   * Built from the invitations rather than the quotations, because a tender is
+   * as much about who stayed silent as who replied — listing only responders
+   * made two of five look identical to two of two. A quotation recorded for
+   * somebody never formally invited still appears: it is a real response, and
+   * dropping it would lose it.
+   */
+  const bidBySupplier = new Map(bids.map((b) => [b.supplier_id, b]));
+  const quoteBySupplier = new Map(quotations.map((q) => [q.supplier_id, q]));
+
+  const responseRows: ResponseRow[] = [
+    ...invites.map((inv) => {
+      // A sourced prospect has no supplier record yet, so the invitation id
+      // stands in as the row key. They are a real bidder either way.
+      const quote = inv.supplier_id
+        ? quoteBySupplier.get(inv.supplier_id)
+        : undefined;
+      return {
+        supplierId: inv.supplier_id ?? inv.id,
+        name:
+          inv.invite_name ??
+          suppliers.find((s) => s.id === inv.supplier_id)?.name ??
+          "Supplier",
+        quotationId: quote?.id ?? null,
+        totalCents: quote?.total_cents ?? null,
+        currency: quote?.currency ?? "KES",
+        submittedAt: quote?.submitted_at ?? null,
+        viaPortal: quote?.submitted_via === "supplier_portal",
+        bid:
+          (inv.supplier_id ? bidBySupplier.get(inv.supplier_id) : null) ?? null,
+        inviteStatus: inv.status as string,
+      };
+    }),
+    ...quotations
+      .filter((q) => !invites.some((i) => i.supplier_id === q.supplier_id))
+      .map((q) => ({
+        supplierId: q.supplier_id,
+        name: q.supplier_name,
+        quotationId: q.id,
+        totalCents: q.total_cents,
+        currency: q.currency,
+        submittedAt: q.submitted_at,
+        viaPortal: q.submitted_via === "supplier_portal",
+        bid: bidBySupplier.get(q.supplier_id) ?? null,
+        inviteStatus: null,
+      })),
+  ];
+
+  // Only once somebody has responded. Before that the invitation list is the
+  // view, and a table of empty rows says nothing it does not already say.
+  const showResponses = quotations.length > 0 || bids.length > 0;
 
   const [invitePending, startInvite] = useTransition();
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -406,19 +460,6 @@ export function ProcurementPanel({
         {/* Read beside the quotations, because the documents and the price are
             weighed together — and an award refused over a missing CR12 needs
             that CR12 to be visibly missing. */}
-        <BidReviewList
-          reviews={bids}
-          names={Object.fromEntries([
-            ...invites.map((i) => [
-              i.supplier_id,
-              i.invite_name ??
-                suppliers.find((s) => s.id === i.supplier_id)?.name ??
-                "Supplier",
-            ]),
-            ...quotations.map((q) => [q.supplier_id, q.supplier_name]),
-          ])}
-        />
-
         {canInvite && (
           <div className={ring("invite")}>
             <p className="mb-2 text-sm font-semibold text-ink">
@@ -650,52 +691,14 @@ export function ProcurementPanel({
           </div>
         )}
 
-        {quotations.length > 0 && (
+        {showResponses && (
           <div className={ring("award")}>
-            <p className="mb-2 text-sm font-semibold text-ink">
-              Quotations received
-            </p>
-            <div className="flex flex-col divide-y divide-line">
-              {quotations.map((q) => (
-                <div
-                  key={q.id}
-                  className="flex items-center justify-between gap-3 py-2.5 first:pt-0"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-ink">
-                      {q.supplier_name}{" "}
-                      {q.submitted_via === "supplier_portal" && (
-                        <span className="font-normal text-ink-faint">
-                          · via portal
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-ink-faint">
-                      {formatMoney(q.total_cents, { currency: q.currency })} ·{" "}
-                      {formatDate(q.submitted_at)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setViewingId(q.id)}
-                    >
-                      View
-                    </Button>
-                    {canAward && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setAwardingId(q.id)}
-                      >
-                        Award
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ResponsesTable
+              rows={responseRows}
+              canAward={canAward}
+              onView={(id) => setViewingId(id)}
+              onAward={(id) => setAwardingId(id)}
+            />
             {awardError && (
               <p className="mt-1 text-xs text-critical">{awardError}</p>
             )}
