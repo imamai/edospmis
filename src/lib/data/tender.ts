@@ -160,6 +160,8 @@ export interface BidSummary {
   submission_id: string;
   supplier_id: string;
   version: number;
+  /** False while the bidder is still working on it and has not signed. */
+  submitted: boolean;
   signed_name: string | null;
   signed_position: string | null;
   signed_at: string | null;
@@ -176,11 +178,17 @@ export async function listBidSubmissions(
   const { data } = await supabase
     .from("edospmis_bid_submissions")
     .select(
-      "id, supplier_id, version, signed_name, signed_position, signed_at, content_hash, edospmis_bid_documents(id)",
+      "id, supplier_id, version, status, signed_name, signed_position, signed_at, content_hash, edospmis_bid_documents(id)",
     )
     .eq("tenant_id", tenantId)
     .eq("rfq_id", rfqId)
-    .eq("status", "submitted")
+    // Drafts included on purpose. A bidder part-way through was invisible to
+    // the buyer, which looked exactly like a bidder who had not started — so
+    // "nothing has arrived" and "everything has arrived but is unsigned" read
+    // the same. What a draft must not do is open: an unsubmitted bid is not a
+    // bid, and reading one is not the buyers to do. Only its existence shows.
+    .in("status", ["draft", "submitted"])
+    .order("status", { ascending: false })
     .order("version", { ascending: false });
 
   const seen = new Set<string>();
@@ -194,15 +202,18 @@ export async function listBidSubmissions(
       signed_position: string | null;
       signed_at: string | null;
       content_hash: string | null;
+      status: string;
       edospmis_bid_documents: { id: string }[] | null;
     };
-    // Ordered newest first, so the first one seen per supplier is current.
+    // Submitted sorts before draft, and newest version first, so the first one
+    // seen per supplier is the one that counts.
     if (seen.has(r.supplier_id)) continue;
     seen.add(r.supplier_id);
     out.push({
       submission_id: r.id,
       supplier_id: r.supplier_id,
       version: r.version,
+      submitted: r.status === "submitted",
       signed_name: r.signed_name,
       signed_position: r.signed_position,
       signed_at: r.signed_at,
@@ -263,6 +274,10 @@ export interface BidReview {
   supplier_id: string;
   submission_id: string;
   version: number;
+  /** False while the bidder is still working. Contents are withheld until true. */
+  submitted: boolean;
+  /** How many files are up so far, reported even for a draft. */
+  document_count: number;
   signed_name: string | null;
   signed_position: string | null;
   signed_at: string | null;
@@ -321,11 +336,18 @@ export async function getBidReview(
     supplier_id: s.supplier_id,
     submission_id: s.submission_id,
     version: s.version,
+    submitted: s.submitted,
+    document_count: (docs ?? []).filter(
+      (d) => (d as { submission_id: string }).submission_id === s.submission_id,
+    ).length,
     signed_name: s.signed_name,
     signed_position: s.signed_position,
     signed_at: s.signed_at,
     content_hash: s.content_hash,
-    documents: (docs ?? [])
+    // An unsubmitted pack reports its size and nothing else. A bid is not a
+    // bid until it is signed, and reading one that is not yet offered is not
+    // the buyer's to do — however convenient it would be.
+    documents: (s.submitted ? (docs ?? []) : [])
       .filter(
         (d) =>
           (d as { submission_id: string }).submission_id === s.submission_id,
@@ -347,7 +369,7 @@ export async function getBidReview(
           note: row.note,
         };
       }),
-    templates: (tpls ?? [])
+    templates: (s.submitted ? (tpls ?? []) : [])
       .filter(
         (t) =>
           (t as { submission_id: string }).submission_id === s.submission_id,

@@ -97,7 +97,12 @@ export function ResponsesTable({
             {rows.map((row) => {
               const isOpen = expanded === row.supplierId;
               const hasPack = row.bid !== null;
-              const complete = hasPack && row.bid!.outstanding.length === 0;
+              // A pack that is still being worked on is reported, not opened.
+              const inProgress = hasPack && !row.bid!.submitted;
+              const complete =
+                hasPack &&
+                row.bid!.submitted &&
+                row.bid!.outstanding.length === 0;
 
               return (
                 <tr
@@ -141,7 +146,17 @@ export function ResponsesTable({
                   <td className="px-3 py-2.5 align-top">
                     {!hasPack ? (
                       <span className="text-xs text-ink-faint">
-                        Not submitted
+                        Nothing uploaded
+                      </span>
+                    ) : inProgress ? (
+                      <span className="flex flex-col gap-0.5">
+                        <Badge tone="attention">in progress</Badge>
+                        <span className="text-[11px] text-ink-faint">
+                          {row.bid!.document_count} file
+                          {row.bid!.document_count === 1 ? "" : "s"} uploaded,
+                          not yet signed. Chase them — nothing counts until they
+                          submit.
+                        </span>
                       </span>
                     ) : complete ? (
                       <button
@@ -180,7 +195,7 @@ export function ResponsesTable({
                       </button>
                     )}
 
-                    {isOpen && hasPack && (
+                    {isOpen && hasPack && row.bid!.submitted && (
                       <ul className="mt-2 flex flex-col gap-1">
                         {row.bid!.documents.map((doc) => (
                           <li
