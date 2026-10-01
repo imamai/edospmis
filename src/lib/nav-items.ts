@@ -1,38 +1,20 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
-  Boxes,
-  FileCheck2,
-  Building,
-  Building2,
   ClipboardList,
-  CreditCard,
   FileSearch,
   FileSignature,
   Gauge,
-  Gavel,
   Globe,
   LayoutDashboard,
-  Landmark,
   LineChart,
   ListChecks,
-  ListOrdered,
-  Network,
   PackageCheck,
   PenTool,
   Receipt,
-  Scale,
   Settings2,
-  ShieldCheck,
   ShoppingCart,
   Sparkles,
-  Tags,
-  Truck,
-  UserCog,
-  Users,
-  UsersRound,
-  Wallet,
-  Webhook,
 } from "lucide-react";
 
 export interface NavItem {
@@ -148,151 +130,12 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 
-  // ── Settings, grouped by what you are setting up ──────────────────────
-  //
-  // Everything below lives under /app/settings and is indexed on the Settings
-  // page, which uses these same five headings. One taxonomy in both places:
-  // two would drift, and then neither would be trustworthy.
+  // Configuration is not in the sidebar. Every one of these screens is listed
+  // on the Settings page with a line saying what it is for, and having both
+  // meant the same twenty entries in two places — which is not a shortcut, it
+  // is two things to keep in step. The sidebar is what you do; Settings is
+  // what you set up.
 
-  {
-    label: "Procurement setup",
-    items: [
-      {
-        href: "/app/settings/catalogue",
-        label: "Item catalogue",
-        icon: Boxes,
-        requires: "procurement.catalogue.manage",
-      },
-      {
-        href: "/app/settings/suppliers",
-        label: "Suppliers",
-        icon: Truck,
-        requires: "procurement.supplier.manage",
-      },
-      {
-        href: "/app/settings/tender",
-        label: "Tender requirements",
-        icon: FileCheck2,
-        requires: "procurement.rfq.create",
-      },
-      {
-        href: "/app/settings/categories",
-        label: "Categories",
-        icon: Tags,
-        requires: "admin.org.manage",
-      },
-    ],
-  },
-  {
-    label: "Money & approvals",
-    items: [
-      {
-        href: "/app/settings/budgets",
-        label: "Budgets",
-        icon: Wallet,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/approval-rules",
-        label: "Approval rules",
-        icon: Gavel,
-        requires: "admin.approvals.manage",
-      },
-      {
-        href: "/app/settings/segregation-of-duties",
-        label: "Finance controls",
-        icon: Scale,
-        requires: "admin.approvals.manage",
-      },
-      {
-        href: "/app/settings/billing",
-        label: "Billing & plan",
-        icon: CreditCard,
-        requires: "admin.org.manage",
-      },
-    ],
-  },
-  {
-    label: "Organization",
-    items: [
-      {
-        href: "/app/settings/organization",
-        label: "Organization profile",
-        icon: Settings2,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/business-units",
-        label: "Business units",
-        icon: Landmark,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/branches",
-        label: "Branches",
-        icon: Network,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/departments",
-        label: "Departments",
-        icon: Building,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/teams",
-        label: "Teams",
-        icon: UsersRound,
-        requires: "admin.org.manage",
-      },
-      {
-        href: "/app/settings/clients",
-        label: "Clients",
-        icon: Building2,
-        requires: "crm.client.manage",
-      },
-    ],
-  },
-  {
-    label: "People & access",
-    items: [
-      {
-        href: "/app/settings/users",
-        label: "Users",
-        icon: Users,
-        requires: "admin.users.manage",
-      },
-      {
-        href: "/app/settings/roles",
-        label: "Roles",
-        icon: ShieldCheck,
-        requires: "admin.roles.manage",
-      },
-      {
-        href: "/app/settings/delegations",
-        label: "Delegations",
-        icon: UserCog,
-        requires: "admin.approvals.manage",
-      },
-    ],
-  },
-  {
-    label: "Workflow & integrations",
-    items: [
-      {
-        href: "/app/settings/queues",
-        label: "Queues",
-        icon: ListOrdered,
-        requires: "admin.workflows.manage",
-      },
-      {
-        href: "/app/settings/webhooks",
-        label: "Webhooks",
-        icon: Webhook,
-        requires: "admin.webhooks.manage",
-      },
-    ],
-  },
   {
     label: "Platform",
     platformOnly: true,
