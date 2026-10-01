@@ -268,3 +268,44 @@ export function awardEmail({
       .join("\n"),
   };
 }
+
+/**
+ * A notification in the same wrapper as everything else we send.
+ *
+ * The templates above each describe one message. This one is generic on
+ * purpose: the notification catalogue (migration 0055) will grow, and a named
+ * template per event would mean editing this file every time somebody adds a
+ * stage — which is how the wrapper and the events drift apart.
+ */
+export function shellEmail({
+  subject,
+  heading,
+  body,
+  cta,
+  link,
+  footer,
+}: {
+  subject: string;
+  heading: string;
+  body: string;
+  cta?: string;
+  link?: string;
+  /** The workspace name, so a person in two of them can tell which this is. */
+  footer?: string;
+}) {
+  return {
+    subject,
+    html: shell({ heading, body, cta, link }),
+    text: [
+      heading,
+      "",
+      body,
+      link ? "" : "",
+      link ?? "",
+      "",
+      footer ? `${footer} · via EDOSPMIS` : "EDOSPMIS by EDOS Centre",
+    ]
+      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+      .join("\n"),
+  };
+}

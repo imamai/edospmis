@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
+import { notifyRole } from "@/lib/notify/notifications";
 import { createClient } from "@/lib/supabase/server";
 import {
   modelAvailable,
@@ -284,10 +285,41 @@ export async function submitPR(
   caseId: string,
   prId: string,
 ): Promise<PRFormState> {
-  await requireSession();
+  const session = await requireSession();
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_submit_pr", { p_pr_id: prId });
   if (error) return { error: error.message, ok: null };
+
+  // Blocks: the request sits until somebody decides, so this one emails.
+  const { data: pr } = await supabase
+    .from("edospmis_prs")
+    .select(
+      "title, estimated_cost_cents, currency, edospmis_cases(case_number)",
+    )
+    .eq("id", prId)
+    .maybeSingle();
+
+  const row = pr as unknown as {
+    title: string;
+    estimated_cost_cents: number;
+    currency: string;
+    edospmis_cases: { case_number: string } | { case_number: string }[] | null;
+  } | null;
+  const caseNumber = Array.isArray(row?.edospmis_cases)
+    ? row?.edospmis_cases[0]?.case_number
+    : row?.edospmis_cases?.case_number;
+
+  await notifyRole({
+    tenantId: session.tenant.id,
+    caseId,
+    kind: "pr.submitted",
+    title: `${caseNumber ?? "A request"} needs your approval`,
+    body: `${row?.title ?? "A request"}, raised by ${session.user.full_name ?? session.user.email}.`,
+    href: `/app/cases/${caseId}`,
+    permission: "procurement.pr.approve",
+    blocks: true,
+    tenantName: session.tenant.name,
+  });
 
   revalidatePath(`/app/cases/${caseId}`);
   revalidatePath("/app/prs");

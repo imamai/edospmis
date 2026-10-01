@@ -1,0 +1,171 @@
+import "server-only";
+
+import { createClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/notify/email";
+import { shellEmail } from "@/lib/notify/auth-email";
+
+/**
+ * Telling people a case is waiting on them.
+ *
+ * Every call goes through here rather than being written at each call site,
+ * so the two rules that make a bell worth reading are enforced once:
+ *
+ *   - email only when the work blocks (see migration 0055 for why),
+ *   - a failure never breaks the thing being notified about.
+ *
+ * That second one matters more than it sounds. These are called after an
+ * approval, an award, a payment — all of which have already happened and
+ * cannot be undone by a mail server having a bad afternoon. A notification
+ * that throws would turn a successful approval into a visible error, which is
+ * both a lie and the kind of thing that gets notifications ripped out.
+ */
+
+export interface NotifyInput {
+  tenantId: string;
+  caseId: string;
+  /** Stable key — 'pr.submitted', 'invoice.exception'. Used to resolve later. */
+  kind: string;
+  title: string;
+  body?: string;
+  /** Where the work is done. Always a path within the app. */
+  href: string;
+  /**
+   * Whoever holds this permission in the tenant hears about it, minus the
+   * person who caused it.
+   */
+  permission: string;
+  /**
+   * Nothing moves until somebody acts, so it also goes out by email. Left off
+   * for anything informational — see the catalogue in migration 0055.
+   */
+  blocks?: boolean;
+  /** For the email only; the bell says it in the title. */
+  tenantName?: string;
+}
+
+interface Recipient {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+}
+
+export async function notifyRole(input: NotifyInput): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("edospmis_notify", {
+      p_tenant_id: input.tenantId,
+      p_case_id: input.caseId,
+      p_kind: input.kind,
+      p_title: input.title,
+      p_body: input.body ?? null,
+      p_href: input.href,
+      p_permission: input.permission,
+    });
+    if (error) throw new Error(error.message);
+
+    if (!input.blocks) return;
+
+    const recipients = (data ?? []) as Recipient[];
+    const base = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+    // Sent one at a time rather than as a single message with everybody in
+    // the To line: these are colleagues, not a mailing list, and a reply-all
+    // about one requisition is its own small disaster.
+    await Promise.all(
+      recipients
+        .filter((r) => r.email)
+        .map((r) =>
+          sendEmail({
+            to: r.email,
+            ...shellEmail({
+              subject: input.title,
+              heading: input.title,
+              body: input.body ?? "This is waiting on you.",
+              cta: "Open it",
+              link: `${base}${input.href}`,
+              footer: input.tenantName,
+            }),
+          }),
+        ),
+    );
+  } catch (cause) {
+    // Logged, never thrown. The approval, award or payment this followed has
+    // already happened.
+    console.error(`EDOSPMIS notification (${input.kind}) failed:`, cause);
+  }
+}
+
+/**
+ * The same, for one named person — nearly always the requester, who holds no
+ * permission that would catch them in the fan-out.
+ */
+export async function notifyUser(input: {
+  tenantId: string;
+  userId: string | null;
+  caseId: string;
+  kind: string;
+  title: string;
+  body?: string;
+  href: string;
+}): Promise<void> {
+  if (!input.userId) return;
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("edospmis_notify_user", {
+      p_tenant_id: input.tenantId,
+      p_user_id: input.userId,
+      p_case_id: input.caseId,
+      p_kind: input.kind,
+      p_title: input.title,
+      p_body: input.body ?? null,
+      p_href: input.href,
+    });
+    if (error) throw new Error(error.message);
+  } catch (cause) {
+    console.error(`EDOSPMIS notification (${input.kind}) failed:`, cause);
+  }
+}
+
+/**
+ * Clear a whole class for a case, because the work is done.
+ *
+ * Called by whoever did it, which is what stops a fan-out becoming a pile:
+ * four approvers were told, one approved, and the other three should not
+ * still be looking at it.
+ */
+export async function resolveNotifications(
+  caseId: string,
+  kind: string,
+): Promise<void> {
+  try {
+    const supabase = await createClient();
+    await supabase.rpc("edospmis_resolve_notifications", {
+      p_case_id: caseId,
+      p_kind: kind,
+    });
+  } catch (cause) {
+    console.error(`EDOSPMIS resolving notifications (${kind}) failed:`, cause);
+  }
+}
+
+export interface InboxItem {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+/** The bell's own read: mine, still outstanding, newest first. */
+export async function getInbox(limit = 20): Promise<InboxItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("edospmis_notifications")
+    .select("id, kind, title, body, href, read_at, created_at")
+    .is("resolved_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as InboxItem[];
+}
