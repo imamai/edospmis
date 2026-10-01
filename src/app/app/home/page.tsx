@@ -1,7 +1,15 @@
 import Link from "next/link";
-import { AlertTriangle, ClipboardList, Inbox, Plus, TriangleAlert, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardList,
+  Inbox,
+  Plus,
+  TriangleAlert,
+  Wallet,
+} from "lucide-react";
 import { requireSession, can } from "@/lib/data/session";
 import { getMyWork } from "@/lib/data/cases";
+import { getMyQueue } from "@/lib/notify/notifications";
 import { getAnalytics } from "@/lib/data/analytics";
 import { getCycleSummary } from "@/lib/data/procurement-reports";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -14,7 +22,8 @@ import { formatMoney, slaStatus } from "@/lib/utils";
 export default async function HomePage() {
   const session = await requireSession();
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = session.user.full_name?.split(" ")[0] ?? "there";
 
   const roleIds = session.roles.map((r) => r.id);
@@ -22,8 +31,12 @@ export default async function HomePage() {
   // The cycle summary is bounded to a recent window and skipped entirely for
   // somebody who cannot see reports, so it costs nothing on a requester's
   // dashboard.
-  const [myWork, analytics, cycle] = await Promise.all([
+  const [myWork, queue, analytics, cycle] = await Promise.all([
     getMyWork(session.tenant.id, roleIds),
+    // The rest of the queue. getMyWork covers approvals, which are decisions
+    // and render with an amount and a priority; this is everything else that
+    // is waiting on a job this person holds.
+    getMyQueue(),
     canSeeReports ? getAnalytics(session.tenant.id) : Promise.resolve(null),
     canSeeReports ? getCycleSummary(session.tenant.id) : Promise.resolve(null),
   ]);
@@ -36,8 +49,8 @@ export default async function HomePage() {
             {greeting}, {firstName}
           </h1>
           <p className="mt-1 text-sm text-ink-faint">
-            {myWork.length > 0
-              ? `${myWork.length} request${myWork.length === 1 ? "" : "s"} waiting on your decision.`
+            {myWork.length + queue.length > 0
+              ? `${myWork.length + queue.length} thing${myWork.length + queue.length === 1 ? "" : "s"} waiting on you.`
               : `You're all caught up in ${session.tenant.name}.`}
           </p>
         </div>
@@ -51,12 +64,17 @@ export default async function HomePage() {
 
       {analytics && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Open cases" value={String(analytics.aging.length)} icon={ClipboardList} tone="brand" />
           <StatCard
-            label="Pending your decision"
-            value={String(myWork.length)}
+            label="Open cases"
+            value={String(analytics.aging.length)}
+            icon={ClipboardList}
+            tone="brand"
+          />
+          <StatCard
+            label="Waiting on you"
+            value={String(myWork.length + queue.length)}
             icon={Inbox}
-            tone={myWork.length > 0 ? "attention" : "brand"}
+            tone={myWork.length + queue.length > 0 ? "attention" : "brand"}
           />
           <StatCard
             label="At risk of SLA breach"
@@ -66,7 +84,12 @@ export default async function HomePage() {
           />
           <StatCard
             label="Estimated spend, open requests"
-            value={formatMoney(analytics.spendByCategory.reduce((sum, c) => sum + c.total_estimated_cents, 0))}
+            value={formatMoney(
+              analytics.spendByCategory.reduce(
+                (sum, c) => sum + c.total_estimated_cents,
+                0,
+              ),
+            )}
             icon={Wallet}
             tone="brand"
           />
@@ -76,13 +99,20 @@ export default async function HomePage() {
       {cycle && <CycleTimeCard summary={cycle} />}
 
       <Card>
-        <CardHeader title="My Work" subtitle="Requests and approvals assigned to you" icon={<ClipboardList className="h-4 w-4" />} />
+        <CardHeader
+          title="My Work"
+          subtitle="Requests and approvals assigned to you"
+          icon={<ClipboardList className="h-4 w-4" />}
+        />
         <CardBody>
           {myWork.length === 0 ? (
             <div className="empty-frame flex flex-col items-center gap-2 px-6 py-10 text-center">
-              <p className="text-sm font-medium text-ink">Nothing waiting on you</p>
+              <p className="text-sm font-medium text-ink">
+                Nothing waiting on you
+              </p>
               <p className="max-w-sm text-xs text-ink-faint">
-                Any request routed to a role you hold shows up here the moment it needs your decision.
+                Any request routed to a role you hold shows up here the moment
+                it needs your decision.
               </p>
             </div>
           ) : (
@@ -96,17 +126,31 @@ export default async function HomePage() {
                     className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 hover:bg-surface-sunk -mx-1 px-1 rounded-lg"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink">{item.pr_title}</p>
+                      <p className="truncate text-sm font-medium text-ink">
+                        {item.pr_title}
+                      </p>
                       <p className="text-xs text-ink-faint">
-                        {item.case_number} · {formatMoney(item.estimated_cost_cents, { currency: item.currency })} · as {item.role_name}
+                        {item.case_number} ·{" "}
+                        {formatMoney(item.estimated_cost_cents, {
+                          currency: item.currency,
+                        })}{" "}
+                        · as {item.role_name}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <Badge tone={item.priority === "urgent" || item.priority === "high" ? "attention" : "neutral"}>
+                      <Badge
+                        tone={
+                          item.priority === "urgent" || item.priority === "high"
+                            ? "attention"
+                            : "neutral"
+                        }
+                      >
                         {item.priority}
                       </Badge>
                       {sla.status !== "none" && (
-                        <p className={`mt-1 text-xs ${sla.status === "breached" ? "text-critical" : sla.status === "warning" ? "text-attention" : "text-ink-faint"}`}>
+                        <p
+                          className={`mt-1 text-xs ${sla.status === "breached" ? "text-critical" : sla.status === "warning" ? "text-attention" : "text-ink-faint"}`}
+                        >
                           {sla.label}
                         </p>
                       )}
@@ -118,6 +162,41 @@ export default async function HomePage() {
           )}
         </CardBody>
       </Card>
+
+      {queue.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Also waiting on you"
+            subtitle="Work routed to a role you hold. It clears itself once anybody does it."
+          />
+          <CardBody className="flex flex-col divide-y divide-line">
+            {queue.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-3 first:pt-0 last:pb-0 hover:bg-surface-sunk"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {item.title}
+                  </p>
+                  {item.body && (
+                    <p className="truncate text-xs text-ink-faint">
+                      {item.body}
+                    </p>
+                  )}
+                </div>
+                {!item.read_at && (
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                    aria-label="Unread"
+                  />
+                )}
+              </Link>
+            ))}
+          </CardBody>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {session.roles.map((r) => (

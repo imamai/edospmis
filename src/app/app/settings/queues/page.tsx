@@ -22,12 +22,25 @@ export default async function QueuesPage() {
       <div>
         <h1 className="text-xl font-semibold text-ink">Queues</h1>
         <p className="mt-1 text-sm text-ink-faint">
-          Where work waits for a given workflow stage. A case only lands in a queue if one exists for its stage.
+          Where work waits for a given workflow stage.
+        </p>
+        {/* Said plainly because it was not: queues are configurable for every
+            stage and only the approval stage has ever written a task into
+            one, so somebody could set up a Finance queue and reasonably wait
+            for work that was never going to arrive. */}
+        <p className="mt-2 rounded-lg border border-attention/25 bg-attention-soft px-3 py-2 text-xs text-attention">
+          Today only the approval stage files work here. Every other stage
+          routes through <span className="font-semibold">My Work</span> and the
+          notification bell instead, which send a case to whoever holds the job
+          and clear it once anybody does it.
         </p>
       </div>
 
       <Card>
-        <CardHeader title="Add a queue" icon={<ListOrdered className="h-4 w-4" />} />
+        <CardHeader
+          title="Add a queue"
+          icon={<ListOrdered className="h-4 w-4" />}
+        />
         <CardBody className="max-w-3xl">
           <QueueForm />
         </CardBody>

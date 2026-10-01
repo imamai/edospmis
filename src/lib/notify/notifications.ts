@@ -225,3 +225,64 @@ export async function caseContext(caseId: string): Promise<CaseContext | null> {
     requesterId: pr?.requester_id ?? null,
   };
 }
+
+/**
+ * The kinds that are somebody's job, as opposed to somebody's news.
+ *
+ * "Your goods have arrived" is worth telling a requester and is not work —
+ * putting it in a work list means a list that cannot be emptied, which is the
+ * same failure as a bell that never clears.
+ *
+ * Classified here rather than with a column on the table, because the
+ * distinction belongs to the catalogue in migration 0055 and changes with it;
+ * a boolean written at insert time would have to be backfilled every time
+ * somebody reclassified an event.
+ *
+ * The `.requester` suffix is the convention for the informational twin of an
+ * actionable event — po.issued is receiving's job, po.issued.requester is the
+ * requester being told.
+ */
+export const ACTIONABLE_KINDS = [
+  "pr.submitted",
+  "pr.approved",
+  "quotation.received",
+  "bid.submitted",
+  "po.pending_approval",
+  "po.issued",
+  "grn.recorded",
+  "grn.inspection_failed",
+  "invoice.submitted",
+  "invoice.exception",
+  "invoice.approved",
+] as const;
+
+export interface QueueItem extends InboxItem {
+  case_id: string | null;
+}
+
+/**
+ * Everything outstanding that is actually yours to do.
+ *
+ * This is the queue. `edospmis_queues` was only ever populated for the
+ * approval stage, so five of six stages had an inbox configured and nothing
+ * ever arrived in it; the notification rows know the case, the stage and who
+ * holds the job, which is everything a queue needs.
+ *
+ * Approvals are left out: they come through getMyWork, which carries the
+ * amount and the priority and renders as a decision rather than a line in a
+ * list. Showing both would mean one requisition appearing twice.
+ */
+export async function getMyQueue(limit = 50): Promise<QueueItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("edospmis_notifications")
+    .select("id, kind, title, body, href, read_at, created_at, case_id")
+    .is("resolved_at", null)
+    .in(
+      "kind",
+      ACTIONABLE_KINDS.filter((k) => k !== "pr.submitted"),
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as QueueItem[];
+}
