@@ -36,6 +36,7 @@ import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
 import { ResponsesTable, type ResponseRow } from "./responses-table";
 import { WorkflowStepper } from "@/components/app/workflow-stepper";
+import { MousePointerClick } from "lucide-react";
 import type { BidReview } from "@/lib/data/tender";
 import type {
   ProcurementTemplate,
@@ -139,10 +140,27 @@ export function ProcurementPanel({
   // The section that matters now gets a ring; the rest stay quiet. One thing
   // lit at a time is the whole point — lighting several is the flat stack
   // this replaced.
-  const ring = (s: ProcurementStep) =>
+  /**
+   * The section to act on, in blue, with a marker on it.
+   *
+   * A faint ring was not enough: on a card of four similar-looking blocks it
+   * read as decoration rather than instruction, and somebody who had not run
+   * a tender before still had to guess. The active section now takes the
+   * brand colour the current chevron already uses, so the step in the stepper
+   * and the block you act in are visibly the same thing.
+   */
+  const active = (s: ProcurementStep) =>
     step === s
-      ? "rounded-lg ring-2 ring-brand/30 ring-offset-2 ring-offset-surface"
+      ? "rounded-lg border border-brand/40 bg-brand/[0.04] p-3 -mx-1"
       : "";
+
+  const marker = (s: ProcurementStep) =>
+    step === s ? (
+      <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[11px] font-semibold text-white">
+        <MousePointerClick className="h-3.5 w-3.5" aria-hidden="true" />
+        Do this next
+      </span>
+    ) : null;
 
   /**
    * One row per supplier who was asked, whether or not they answered.
@@ -447,21 +465,25 @@ export function ProcurementPanel({
         {/* Above the invitations on purpose: what a bidder must return is part
             of the invitation, and deciding it afterwards means the first few
             were asked for something different from the rest. */}
-        <RequirementsPicker
-          rfqId={rfq.id}
-          caseId={rfq.case_id}
-          docTypes={docTypes}
-          templates={templates}
-          current={requirements}
-          locked={requirementsLocked}
-          canEdit={canInvite}
-        />
+        <div className={active("requirements")}>
+          {marker("requirements")}
+          <RequirementsPicker
+            rfqId={rfq.id}
+            caseId={rfq.case_id}
+            docTypes={docTypes}
+            templates={templates}
+            current={requirements}
+            locked={requirementsLocked}
+            canEdit={canInvite}
+          />
+        </div>
 
         {/* Read beside the quotations, because the documents and the price are
             weighed together — and an award refused over a missing CR12 needs
             that CR12 to be visibly missing. */}
         {canInvite && (
-          <div className={ring("invite")}>
+          <div className={active("invite")}>
+            {marker("invite")}
             <p className="mb-2 text-sm font-semibold text-ink">
               Invite suppliers
             </p>
@@ -542,7 +564,8 @@ export function ProcurementPanel({
         )}
 
         {invites.length > 0 && (
-          <div className={ring("responses")}>
+          <div className={active("responses")}>
+            {marker("responses")}
             <p className="mb-2 text-sm font-semibold text-ink">Invited</p>
             <div className="flex flex-col divide-y divide-line">
               {invites.map((inv) => {
@@ -692,7 +715,8 @@ export function ProcurementPanel({
         )}
 
         {showResponses && (
-          <div className={ring("award")}>
+          <div className={active("award")}>
+            {marker("award")}
             <ResponsesTable
               rows={responseRows}
               canAward={canAward}
