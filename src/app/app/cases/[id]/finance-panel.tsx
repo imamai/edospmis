@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, Trash2, Receipt } from "lucide-react";
+import { FileText, Pencil, Plus, Trash2, Receipt } from "lucide-react";
 import {
   submitInvoice,
   updateInvoice,
@@ -342,6 +342,12 @@ export function FinancePanel({
   const resolvingException = invoices
     .flatMap((i) => i.exceptions)
     .find((ex) => ex.id === resolvingId);
+
+  // The invoice the exception was raised against, so the dialog can offer to
+  // correct the figures rather than only to write a note about them.
+  const resolvingInvoice = invoices.find((i) =>
+    i.exceptions.some((ex) => ex.id === resolvingId),
+  );
   const receiptRecorded = matchBasis.grnNumbers.length > 0;
   const canBillMore = receiptRecorded && remainingNet > 0;
 
@@ -776,10 +782,41 @@ export function FinancePanel({
               value={resolvingId ?? ""}
             />
             <input type="hidden" name="case_id" value={caseId} />
+            {/* An exception is one of two things, and the dialog used to
+                assume the first: either the figures are right and the
+                difference is explainable, or the figures are wrong. Only a
+                note was ever offered, so correcting an invoice meant closing
+                this, finding the Correct button, and remembering what the
+                exception had said. */}
+            {canSubmit && resolvingInvoice && (
+              <div className="rounded-lg border border-line bg-surface-sunk p-3">
+                <p className="text-xs text-ink-soft">
+                  If the invoice itself is wrong, change the figures instead of
+                  explaining them — the match is recalculated and this exception
+                  is cleared by the correction.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="mt-2"
+                  onClick={() => {
+                    const invoice = resolvingInvoice;
+                    setResolvingId(null);
+                    startCorrecting(invoice);
+                  }}
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Correct invoice {resolvingInvoice.invoice_number}
+                </Button>
+              </div>
+            )}
+
             <TextArea
               label="How was this resolved?"
               name="resolution_note"
               rows={2}
+              hint="Use this when the figures are right and the difference is explainable."
             />
             {resolveState.error && (
               <p className="text-xs text-critical">{resolveState.error}</p>
