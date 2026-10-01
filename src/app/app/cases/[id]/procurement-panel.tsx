@@ -35,6 +35,7 @@ import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
 import { BidReviewList } from "./bid-review";
+import { WorkflowStepper } from "@/components/app/workflow-stepper";
 import type { BidReview } from "@/lib/data/tender";
 import type {
   ProcurementTemplate,
@@ -43,6 +44,18 @@ import type {
 } from "@/lib/tender-types";
 
 const initialQuotation: ProcurementState = { error: null, ok: null };
+
+/** The five jobs that make up the procurement stage, in the order they happen. */
+type ProcurementStep =
+  "requirements" | "invite" | "responses" | "award" | "po" | "done";
+
+const PROCUREMENT_STEPS = [
+  { key: "requirements", label: "Requirements" },
+  { key: "invite", label: "Invite" },
+  { key: "responses", label: "Responses" },
+  { key: "award", label: "Award" },
+  { key: "po", label: "Purchase order" },
+];
 
 const INVITE_STATUS_TONE: Record<
   RfqInviteStatus,
@@ -85,6 +98,51 @@ export function ProcurementPanel({
   const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
   const invitedSet = new Set(invitedSupplierIds);
   const uninvited = suppliers.filter((s) => !invitedSet.has(s.id));
+
+  /**
+   * Where this tender has got to, inside the procurement stage.
+   *
+   * The case-level stepper says "Procurement" and stops there, which is
+   * accurate and useless: procurement is five jobs, and the card listed all
+   * five as equal stacked sections with nothing to say which one is yours
+   * now. Somebody who had not run a tender before could not tell whether to
+   * press Invite, wait, or award.
+   *
+   * Derived from what has actually happened rather than stored, so it cannot
+   * disagree with the panel underneath it — there is no step field to fall
+   * out of step with the data.
+   */
+  const step: ProcurementStep = po
+    ? po.status === "pending_approval"
+      ? "po"
+      : "done"
+    : quotations.length > 0
+      ? "award"
+      : invites.length > 0
+        ? "responses"
+        : requirements.length > 0
+          ? "invite"
+          : "requirements";
+
+  const nextLine: Record<ProcurementStep, string> = {
+    requirements:
+      "Say what bidders must return — or skip it and ask only for a price — then invite suppliers.",
+    invite:
+      "Invite the suppliers you want to quote, then send each of them their link.",
+    responses:
+      "Waiting for suppliers to respond. Record a quotation yourself if one came back outside the system.",
+    award: "Compare what came back, then award one of the quotations.",
+    po: "The purchase order is waiting for approval.",
+    done: "The purchase order has been issued. Nothing further here.",
+  };
+
+  // The section that matters now gets a ring; the rest stay quiet. One thing
+  // lit at a time is the whole point — lighting several is the flat stack
+  // this replaced.
+  const ring = (s: ProcurementStep) =>
+    step === s
+      ? "rounded-lg ring-2 ring-brand/30 ring-offset-2 ring-offset-surface"
+      : "";
 
   const [invitePending, startInvite] = useTransition();
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -317,6 +375,21 @@ export function ProcurementPanel({
         }
       />
       <CardBody className="flex flex-col gap-5">
+        {/* The same chevrons as the case-level stepper above, one level down.
+            Reused rather than redrawn so the two read as the same idea at two
+            scales, and so a change to how a step looks happens once. */}
+        <div className="flex flex-col gap-2">
+          <WorkflowStepper
+            stages={PROCUREMENT_STEPS}
+            currentKey={step}
+            complete={step === "done"}
+          />
+          <p className="text-xs text-ink-soft">
+            <span className="font-semibold text-ink">Next: </span>
+            {nextLine[step]}
+          </p>
+        </div>
+
         {/* Above the invitations on purpose: what a bidder must return is part
             of the invitation, and deciding it afterwards means the first few
             were asked for something different from the rest. */}
@@ -347,7 +420,7 @@ export function ProcurementPanel({
         />
 
         {canInvite && (
-          <div>
+          <div className={ring("invite")}>
             <p className="mb-2 text-sm font-semibold text-ink">
               Invite suppliers
             </p>
@@ -428,7 +501,7 @@ export function ProcurementPanel({
         )}
 
         {invites.length > 0 && (
-          <div>
+          <div className={ring("responses")}>
             <p className="mb-2 text-sm font-semibold text-ink">Invited</p>
             <div className="flex flex-col divide-y divide-line">
               {invites.map((inv) => {
@@ -578,7 +651,7 @@ export function ProcurementPanel({
         )}
 
         {quotations.length > 0 && (
-          <div>
+          <div className={ring("award")}>
             <p className="mb-2 text-sm font-semibold text-ink">
               Quotations received
             </p>
