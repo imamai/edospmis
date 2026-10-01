@@ -5,8 +5,8 @@ import { headers } from "next/headers";
 import { requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/notify/email";
-import { rfqInviteEmail } from "@/lib/notify/auth-email";
-import { formatDate } from "@/lib/utils";
+import { awardEmail, rfqInviteEmail } from "@/lib/notify/auth-email";
+import { formatDate, formatMoney } from "@/lib/utils";
 
 export interface ProcurementState {
   error: string | null;
@@ -224,7 +224,7 @@ export async function awardPO(
   expectedDeliveryDate: string | null,
   overrideReason?: string | null,
 ): Promise<ProcurementState> {
-  await requireSession();
+  const session = await requireSession();
   const supabase = await createClient();
   const { error } = await supabase.rpc("edospmis_award_po", {
     p_rfq_id: rfqId,
@@ -234,6 +234,78 @@ export async function awardPO(
     p_override_reason: overrideReason?.trim() || null,
   });
   if (error) return { error: error.message, ok: null };
+
+  // Tell the winner. This was not being sent at all: an award closed the RFQ,
+  // issued a purchase order, and told the supplier nothing — so somebody had
+  // to remember to ring them, and a supplier who finds out when the order
+  // arrives has had no chance to say the price has moved or the stock is gone.
+  //
+  // After the award and never fatal. The purchase order exists either way; a
+  // mail failure must not unwind a commitment, and reporting it as an award
+  // failure would be a lie.
+  try {
+    const one = <T>(v: T | T[] | null | undefined): T | null =>
+      Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+
+    const { data: row } = await supabase
+      .from("edospmis_quotations")
+      .select(
+        "total_cents, currency, supplier_id, edospmis_suppliers(email), edospmis_rfqs(title)",
+      )
+      .eq("id", quotationId)
+      .maybeSingle();
+
+    const quote = row as unknown as {
+      total_cents: number;
+      currency: string;
+      supplier_id: string;
+      edospmis_suppliers:
+        { email: string | null } | { email: string | null }[] | null;
+      edospmis_rfqs: { title: string } | { title: string }[] | null;
+    } | null;
+
+    if (quote) {
+      // The address on the supplier record, or the one the invitation went to
+      // for somebody sourced for this tender alone.
+      const { data: invite } = await supabase
+        .from("edospmis_rfq_suppliers")
+        .select("invite_email")
+        .eq("rfq_id", rfqId)
+        .eq("supplier_id", quote.supplier_id)
+        .maybeSingle<{ invite_email: string | null }>();
+
+      const { data: po } = await supabase
+        .from("edospmis_purchase_orders")
+        .select("po_number, expected_delivery_date")
+        .eq("rfq_id", rfqId)
+        .maybeSingle<{
+          po_number: string;
+          expected_delivery_date: string | null;
+        }>();
+
+      const to = one(quote.edospmis_suppliers)?.email || invite?.invite_email;
+
+      if (to && po) {
+        await sendEmail({
+          to,
+          ...awardEmail({
+            tenantName: session.tenant.name,
+            rfqTitle: one(quote.edospmis_rfqs)?.title ?? "your quotation",
+            poNumber: po.po_number,
+            amount: formatMoney(quote.total_cents, {
+              currency: quote.currency,
+            }),
+            expectedDelivery: po.expected_delivery_date
+              ? formatDate(po.expected_delivery_date)
+              : null,
+          }),
+        });
+      }
+    }
+  } catch (cause) {
+    console.error("EDOSPMIS award notification failed:", cause);
+  }
+
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order issued." };
 }

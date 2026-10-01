@@ -22,8 +22,13 @@ function shell({
 }: {
   heading: string;
   body: string;
-  cta: string;
-  link: string;
+  /**
+   * Both or neither. Most of these emails exist to get somebody to a page, but
+   * an award tells a supplier something — there is nowhere for them to click,
+   * and a button going nowhere is worse than no button.
+   */
+  cta?: string;
+  link?: string;
 }): string {
   return `<!doctype html>
 <html lang="en">
@@ -38,13 +43,17 @@ function shell({
       <tr>
         <td style="padding:12px 28px 0;">
           <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${body}</p>
-          <p style="margin:0 0 20px;">
+          ${
+            cta && link
+              ? `<p style="margin:0 0 20px;">
             <a href="${link}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:600;">${cta}</a>
           </p>
           <p style="margin:0 0 16px;font-size:13px;line-height:1.6;color:#545b6b;">
             If the button doesn&rsquo;t work, copy this address into your browser:
           </p>
-          <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;color:#545b6b;">${link}</p>
+          <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;color:#545b6b;">${link}</p>`
+              : ""
+          }
         </td>
       </tr>
       <tr>
@@ -204,5 +213,58 @@ export function rfqInviteEmail({
       "",
       `Sent by ${tenantName} via EDOSPMIS.`,
     ].join("\n"),
+  };
+}
+
+/**
+ * Telling a supplier they have won.
+ *
+ * Sent by the system because it was not being sent at all: an award closed
+ * the RFQ, issued a purchase order and told the winner nothing, so somebody
+ * had to remember to ring them. A supplier who learns they have won when the
+ * order arrives has had no chance to say the price has moved or the stock has
+ * gone.
+ *
+ * The purchase order number is in it deliberately. It is what they will quote
+ * back on their invoice, and an award email without it starts a thread asking
+ * for it.
+ */
+export function awardEmail({
+  tenantName,
+  rfqTitle,
+  poNumber,
+  amount,
+  expectedDelivery,
+}: {
+  tenantName: string;
+  rfqTitle: string;
+  poNumber: string;
+  amount: string;
+  expectedDelivery?: string | null;
+}) {
+  const delivery = expectedDelivery
+    ? ` Delivery is expected by ${expectedDelivery}.`
+    : "";
+  return {
+    subject: `Award: ${rfqTitle} — ${poNumber}`,
+    html: shell({
+      heading: `${tenantName} has awarded you ${rfqTitle}`,
+      body:
+        `Purchase order <strong>${poNumber}</strong>, ${amount}.${delivery} ` +
+        `Quote ${poNumber} on your invoice so it can be matched to this order.`,
+    }),
+    text: [
+      `${tenantName} has awarded you ${rfqTitle}.`,
+      "",
+      `Purchase order: ${poNumber}`,
+      `Value: ${amount}`,
+      expectedDelivery ? `Expected delivery: ${expectedDelivery}` : "",
+      "",
+      `Quote ${poNumber} on your invoice so it can be matched to this order.`,
+      "",
+      `Sent by ${tenantName} via EDOSPMIS.`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
   };
 }
