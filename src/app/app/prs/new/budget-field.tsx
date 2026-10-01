@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SelectInput, TextArea } from "@/components/ui/field";
+import { TextArea } from "@/components/ui/field";
+import { BudgetPicker } from "./budget-picker";
 import { formatMoney } from "@/lib/utils";
 import type { BudgetChoice } from "@/lib/data/budgets";
 
@@ -25,32 +26,31 @@ export function BudgetField({
 }) {
   const [budgetId, setBudgetId] = useState("");
 
-  const chosen = useMemo(() => budgets.find((b) => b.id === budgetId) ?? null, [budgets, budgetId]);
-  const remainingAfter = chosen ? chosen.available_cents - estimatedCents : null;
+  const chosen = useMemo(
+    () => budgets.find((b) => b.id === budgetId) ?? null,
+    [budgets, budgetId],
+  );
+  const remainingAfter = chosen
+    ? chosen.available_cents - estimatedCents
+    : null;
   const overBudget = remainingAfter !== null && remainingAfter < 0;
 
   if (budgets.length === 0) {
-    return (
-      <input type="hidden" name="budget_id" value="" />
-    );
+    return <input type="hidden" name="budget_id" value="" />;
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <SelectInput
-        label="Budget line"
-        name="budget_id"
+      {/* The value travels in a hidden input because the picker is a dialog,
+          and a dialog portals to document.body — outside this form, so a
+          control rendered inside it would not be submitted with it. */}
+      <input type="hidden" name="budget_id" value={budgetId} />
+      <BudgetPicker
+        budgets={budgets}
         value={budgetId}
-        onChange={(e) => setBudgetId(e.target.value)}
-        hint="What this is to be met from"
-      >
-        <option value="">Not set</option>
-        {budgets.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.label} — {formatMoney(b.available_cents, { currency: b.currency })} left
-          </option>
-        ))}
-      </SelectInput>
+        onChange={setBudgetId}
+        estimatedCents={estimatedCents}
+      />
 
       {chosen && (
         <div
@@ -61,11 +61,13 @@ export function BudgetField({
           }
         >
           <p className="tnum">
-            {formatMoney(chosen.available_cents, { currency: chosen.currency })} available
+            {formatMoney(chosen.available_cents, { currency: chosen.currency })}{" "}
+            available
             {estimatedCents > 0 && (
               <>
                 {" · "}
-                this request is {formatMoney(estimatedCents, { currency: chosen.currency })}
+                this request is{" "}
+                {formatMoney(estimatedCents, { currency: chosen.currency })}
                 {" · "}
                 <strong className="font-semibold">
                   {overBudget
@@ -77,7 +79,8 @@ export function BudgetField({
           </p>
           {overBudget && (
             <p className="mt-1 text-xs">
-              This can still be submitted. Say why, and the approver will see it on the decision.
+              This can still be submitted. Say why, and the approver will see it
+              on the decision.
             </p>
           )}
         </div>
