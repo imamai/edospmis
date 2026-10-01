@@ -10,23 +10,42 @@ export interface ProcurementState {
   ok: string | null;
 }
 
-export async function startProcurement(caseId: string): Promise<ProcurementState> {
+export async function startProcurement(
+  caseId: string,
+): Promise<ProcurementState> {
   await requireSession();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_start_procurement", { p_case_id: caseId });
+  const { error } = await supabase.rpc("edospmis_start_procurement", {
+    p_case_id: caseId,
+  });
   if (error) return { error: error.message, ok: null };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Procurement started." };
 }
 
-export async function inviteSupplierToRfq(rfqId: string, caseId: string, supplierId: string): Promise<ProcurementState> {
+export async function inviteSupplierToRfq(
+  rfqId: string,
+  caseId: string,
+  supplierId: string,
+): Promise<ProcurementState> {
   const session = await requireSession();
   if (!supplierId) return { error: "Choose a supplier.", ok: null };
   const supabase = await createClient();
   const { error } = await supabase
     .from("edospmis_rfq_suppliers")
-    .insert({ tenant_id: session.tenant.id, rfq_id: rfqId, supplier_id: supplierId });
-  if (error) return { error: error.code === "23505" ? "Already invited." : "Couldn't invite that supplier.", ok: null };
+    .insert({
+      tenant_id: session.tenant.id,
+      rfq_id: rfqId,
+      supplier_id: supplierId,
+    });
+  if (error)
+    return {
+      error:
+        error.code === "23505"
+          ? "Already invited."
+          : "Couldn't invite that supplier.",
+      ok: null,
+    };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Supplier invited." };
 }
@@ -40,7 +59,8 @@ export async function inviteProspectToRfq(
   phone: string,
 ): Promise<ProcurementState> {
   const session = await requireSession();
-  if (!name.trim()) return { error: "Enter a company or contact name.", ok: null };
+  if (!name.trim())
+    return { error: "Enter a company or contact name.", ok: null };
   const supabase = await createClient();
   const { error } = await supabase.from("edospmis_rfq_suppliers").insert({
     tenant_id: session.tenant.id,
@@ -54,20 +74,29 @@ export async function inviteProspectToRfq(
   return { error: null, ok: "Supplier invited." };
 }
 
-export async function shareRfqInviteLink(caseId: string, inviteId: string): Promise<ProcurementState> {
+export async function shareRfqInviteLink(
+  caseId: string,
+  inviteId: string,
+): Promise<ProcurementState> {
   const session = await requireSession();
   const supabase = await createClient();
   const { data: invite } = await supabase
     .from("edospmis_rfq_suppliers")
-    .select("access_token, invite_email, invite_name, supplier_id, rfq_id, edospmis_rfqs(title), edospmis_suppliers(name, email)")
+    .select(
+      "access_token, invite_email, invite_name, supplier_id, rfq_id, edospmis_rfqs(title), edospmis_suppliers(name, email)",
+    )
     .eq("id", inviteId)
     .maybeSingle();
   if (!invite) return { error: "Couldn't find that invitation.", ok: null };
 
   const rfq = invite.edospmis_rfqs as unknown as { title: string } | null;
-  const supplier = invite.edospmis_suppliers as unknown as { name: string; email: string | null } | null;
+  const supplier = invite.edospmis_suppliers as unknown as {
+    name: string;
+    email: string | null;
+  } | null;
   const email = invite.invite_email || supplier?.email;
-  if (!email) return { error: "This supplier has no email address on file.", ok: null };
+  if (!email)
+    return { error: "This supplier has no email address on file.", ok: null };
 
   const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${invite.access_token}`;
   const result = await sendEmail({
@@ -75,13 +104,17 @@ export async function shareRfqInviteLink(caseId: string, inviteId: string): Prom
     subject: `Request for quotation: ${rfq?.title ?? "New RFQ"} — ${session.tenant.name}`,
     html: `<p>${session.tenant.name} would like a quotation for <strong>${rfq?.title ?? "a request"}</strong>.</p><p><a href="${link}">Review the items and submit your quote here</a></p><p>This link is unique to you and expires in 30 days.</p>`,
   });
-  if (!result.ok) return { error: result.error ?? "Couldn't send the email.", ok: null };
+  if (!result.ok)
+    return { error: result.error ?? "Couldn't send the email.", ok: null };
 
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: `Emailed to ${email}.` };
 }
 
-export async function recordQuotation(_prev: ProcurementState, form: FormData): Promise<ProcurementState> {
+export async function recordQuotation(
+  _prev: ProcurementState,
+  form: FormData,
+): Promise<ProcurementState> {
   const session = await requireSession();
   const rfqId = String(form.get("rfq_id") ?? "");
   const caseId = String(form.get("case_id") ?? "");
@@ -90,7 +123,8 @@ export async function recordQuotation(_prev: ProcurementState, form: FormData): 
   const notes = String(form.get("notes") ?? "").trim() || null;
   if (!supplierId) return { error: "Choose a supplier.", ok: null };
   const totalCents = Math.round(Number(totalRaw) * 100);
-  if (!Number.isFinite(totalCents) || totalCents <= 0) return { error: "Enter the quoted amount.", ok: null };
+  if (!Number.isFinite(totalCents) || totalCents <= 0)
+    return { error: "Enter the quoted amount.", ok: null };
 
   const supabase = await createClient();
   const { error } = await supabase.from("edospmis_quotations").insert({
@@ -106,12 +140,21 @@ export async function recordQuotation(_prev: ProcurementState, form: FormData): 
   return { error: null, ok: "Quotation recorded." };
 }
 
+/**
+ * Issue the purchase order.
+ *
+ * `overrideReason` is only ever read when the winning bidder has not returned
+ * something mandatory. The gate itself lives in edospmis_award_po, not here,
+ * so passing a reason when nothing is missing changes nothing and cannot be
+ * used to pre-arm an override.
+ */
 export async function awardPO(
   rfqId: string,
   caseId: string,
   quotationId: string,
   notes: string,
   expectedDeliveryDate: string | null,
+  overrideReason?: string | null,
 ): Promise<ProcurementState> {
   await requireSession();
   const supabase = await createClient();
@@ -120,16 +163,22 @@ export async function awardPO(
     p_quotation_id: quotationId,
     p_notes: notes || null,
     p_expected_delivery_date: expectedDeliveryDate || null,
+    p_override_reason: overrideReason?.trim() || null,
   });
   if (error) return { error: error.message, ok: null };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order issued." };
 }
 
-export async function approvePO(poId: string, caseId: string): Promise<ProcurementState> {
+export async function approvePO(
+  poId: string,
+  caseId: string,
+): Promise<ProcurementState> {
   await requireSession();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("edospmis_approve_po", { p_po_id: poId });
+  const { error } = await supabase.rpc("edospmis_approve_po", {
+    p_po_id: poId,
+  });
   if (error) return { error: error.message, ok: null };
   revalidatePath(`/app/cases/${caseId}`);
   return { error: null, ok: "Purchase order approved." };

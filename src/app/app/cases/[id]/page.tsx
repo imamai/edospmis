@@ -8,6 +8,12 @@ import { getProcurementDetail, getSuppliers } from "@/lib/data/procurement";
 import { getFulfilmentDetail } from "@/lib/data/fulfilment";
 import { getFinanceDetail } from "@/lib/data/finance";
 import { listCaseAttachments } from "@/lib/data/attachments";
+import {
+  listBidSubmissions,
+  listDocTypes,
+  listRfqRequirements,
+  listTemplates,
+} from "@/lib/data/tender";
 import { getStageDurations, getCurrentStageDueAt } from "@/lib/data/cases";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +96,17 @@ export default async function CaseDetailPage({
     : null;
   const suppliers =
     c.status === "procurement" ? await getSuppliers(session.tenant.id) : [];
+
+  // The tender pack, only once there is an RFQ to hang it on.
+  const rfqId = procurementDetail?.rfq?.id ?? null;
+  const [docTypes, templates, requirements, bids] = rfqId
+    ? await Promise.all([
+        listDocTypes(session.tenant.id),
+        listTemplates(session.tenant.id),
+        listRfqRequirements(session.tenant.id, rfqId),
+        listBidSubmissions(session.tenant.id, rfqId),
+      ])
+    : [[], [], [], []];
 
   const hasPO = !!procurementDetail?.po;
   const poIssued =
@@ -460,6 +477,10 @@ export default async function CaseDetailPage({
             PANEL_STAGE_KEYS.procurement,
             c.current_stage_key,
           )}
+          docTypes={docTypes}
+          templates={templates}
+          requirements={requirements}
+          requirementsLocked={bids.length > 0}
         />
       )}
 

@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate } from "@/lib/utils";
 import { QuoteForm, DeclineInviteControl } from "./quote-form";
+import { TenderPackForm } from "./tender-pack-form";
+import { bidPackByToken } from "@/lib/data/tender";
 import type { PRItem } from "@/lib/database.types";
 
 interface TokenRow {
@@ -16,16 +18,28 @@ interface TokenRow {
   token_expired: boolean;
 }
 
-export default async function QuotePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function QuotePage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = await params;
   const supabase = createAdminClient();
-  const { data, error } = await supabase.rpc("edospmis_get_rfq_by_token", { p_token: token });
+  const { data, error } = await supabase.rpc("edospmis_get_rfq_by_token", {
+    p_token: token,
+  });
   const row = (Array.isArray(data) ? data[0] : data) as TokenRow | undefined;
+
+  // The pack this tender asks for, if it asks for anything. Read with the
+  // same token, by a function that re-checks it independently.
+  const pack = row ? await bidPackByToken(token) : null;
 
   if (error || !row) {
     return (
       <Shell>
-        <p className="text-sm text-ink-soft">This link is invalid or has expired. Ask the sender for a new one.</p>
+        <p className="text-sm text-ink-soft">
+          This link is invalid or has expired. Ask the sender for a new one.
+        </p>
       </Shell>
     );
   }
@@ -33,11 +47,16 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   return (
     <Shell>
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Request for quotation</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          Request for quotation
+        </p>
         <h1 className="text-xl font-semibold text-ink">{row.rfq_title}</h1>
         <p className="text-sm text-ink-faint">
           From {row.tenant_name}
-          {row.closing_date ? ` — please respond by ${formatDate(row.closing_date)}` : ""}.
+          {row.closing_date
+            ? ` — please respond by ${formatDate(row.closing_date)}`
+            : ""}
+          .
         </p>
       </div>
 
@@ -47,7 +66,8 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
         </p>
       ) : row.invite_status === "declined" ? (
         <p className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2.5 text-sm text-critical">
-          You declined this request. Contact {row.tenant_name} if that was a mistake.
+          You declined this request. Contact {row.tenant_name} if that was a
+          mistake.
         </p>
       ) : row.token_expired ? (
         <p className="rounded-lg border border-attention/25 bg-attention-soft px-3 py-2.5 text-sm text-attention">
@@ -58,8 +78,17 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
           This request is no longer open for quotes.
         </p>
       ) : (
-        <div className="flex flex-col gap-4">
-          <QuoteForm token={token} items={row.items} defaultName={row.supplier_display_name ?? ""} />
+        <div className="flex flex-col gap-6">
+          {/* Prices first: it is what a supplier came to give, and the pack
+              below is the paperwork that has to come with it. */}
+          <QuoteForm
+            token={token}
+            items={row.items}
+            defaultName={row.supplier_display_name ?? ""}
+          />
+          {pack && pack.requirements.length > 0 && (
+            <TenderPackForm token={token} pack={pack} />
+          )}
           <DeclineInviteControl token={token} />
         </div>
       )}
@@ -71,8 +100,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh justify-center bg-surface-sunk px-4 py-10">
       <div className="flex w-full max-w-3xl flex-col gap-5">
-        <p className="text-center text-xs font-semibold uppercase tracking-wide text-ink-faint">EDOSPMIS</p>
-        <div className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-6 shadow-card">{children}</div>
+        <p className="text-center text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          EDOSPMIS
+        </p>
+        <div className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-6 shadow-card">
+          {children}
+        </div>
       </div>
     </div>
   );

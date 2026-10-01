@@ -7,7 +7,11 @@ export interface QuoteFormState {
   error: string | null;
 }
 
-export async function submitQuotation(token: string, _prev: QuoteFormState, form: FormData): Promise<QuoteFormState> {
+export async function submitQuotation(
+  token: string,
+  _prev: QuoteFormState,
+  form: FormData,
+): Promise<QuoteFormState> {
   const linePricesRaw = String(form.get("line_prices") ?? "[]");
   const notes = String(form.get("notes") ?? "").trim();
   const supplierName = String(form.get("supplier_name") ?? "").trim();
@@ -18,7 +22,9 @@ export async function submitQuotation(token: string, _prev: QuoteFormState, form
   try {
     linePrices = JSON.parse(linePricesRaw);
   } catch {
-    return { error: "Something went wrong reading your prices — please try again." };
+    return {
+      error: "Something went wrong reading your prices — please try again.",
+    };
   }
 
   const supabase = createAdminClient();
@@ -36,10 +42,17 @@ export async function submitQuotation(token: string, _prev: QuoteFormState, form
   return { error: null };
 }
 
-export async function declineInvite(token: string, _prev: QuoteFormState, form: FormData): Promise<QuoteFormState> {
+export async function declineInvite(
+  token: string,
+  _prev: QuoteFormState,
+  form: FormData,
+): Promise<QuoteFormState> {
   const reason = String(form.get("reason") ?? "").trim();
   const supabase = createAdminClient();
-  const { error } = await supabase.rpc("edospmis_decline_quotation_invite", { p_token: token, p_reason: reason || null });
+  const { error } = await supabase.rpc("edospmis_decline_quotation_invite", {
+    p_token: token,
+    p_reason: reason || null,
+  });
   if (error) return { error: error.message };
 
   revalidatePath(`/quote/${token}`);

@@ -2,7 +2,14 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Copy, Mail, Check, AlertTriangle, ShoppingCart } from "lucide-react";
+import {
+  FileText,
+  Copy,
+  Mail,
+  Check,
+  AlertTriangle,
+  ShoppingCart,
+} from "lucide-react";
 import {
   inviteSupplierToRfq,
   inviteProspectToRfq,
@@ -15,16 +22,30 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { NumberInput, SelectInput, TextArea, TextInput } from "@/components/ui/field";
+import {
+  NumberInput,
+  SelectInput,
+  TextArea,
+  TextInput,
+} from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
 import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
+import { RequirementsPicker } from "./requirements-picker";
+import type {
+  ProcurementTemplate,
+  RfqRequirement,
+  SupplierDocType,
+} from "@/lib/tender-types";
 
 const initialQuotation: ProcurementState = { error: null, ok: null };
 
-const INVITE_STATUS_TONE: Record<RfqInviteStatus, "neutral" | "info" | "good" | "critical"> = {
+const INVITE_STATUS_TONE: Record<
+  RfqInviteStatus,
+  "neutral" | "info" | "good" | "critical"
+> = {
   invited: "neutral",
   viewed: "info",
   submitted: "good",
@@ -38,6 +59,10 @@ export function ProcurementPanel({
   canAward,
   canApprovePO,
   emphasize,
+  docTypes,
+  templates,
+  requirements,
+  requirementsLocked,
 }: {
   detail: ProcurementDetail;
   suppliers: Supplier[];
@@ -45,6 +70,11 @@ export function ProcurementPanel({
   canAward: boolean;
   canApprovePO: boolean;
   emphasize?: boolean;
+  docTypes: SupplierDocType[];
+  templates: ProcurementTemplate[];
+  requirements: RfqRequirement[];
+  /** A bid is in, so what this tender asks for can no longer change. */
+  requirementsLocked: boolean;
 }) {
   const router = useRouter();
   const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
@@ -61,17 +91,32 @@ export function ProcurementPanel({
   const [prospectPending, startProspect] = useTransition();
   const [prospectError, setProspectError] = useState<string | null>(null);
 
-  const [shareMsg, setShareMsg] = useState<Record<string, { text: string; error: boolean }>>({});
+  const [shareMsg, setShareMsg] = useState<
+    Record<string, { text: string; error: boolean }>
+  >({});
   const [sharePending, startShare] = useTransition();
 
   const [recordingQuote, setRecordingQuote] = useState(false);
-  const [quoteState, quoteAction, quotePending] = useActionState(recordQuotation, initialQuotation);
+  const [quoteState, quoteAction, quotePending] = useActionState(
+    recordQuotation,
+    initialQuotation,
+  );
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
   const [expectedDelivery, setExpectedDelivery] = useState("");
   const [awardPending, startAward] = useTransition();
   const [awardError, setAwardError] = useState<string | null>(null);
+  /**
+   * Shown only once the database has actually refused.
+   *
+   * Offering the override up front would make it part of the normal award
+   * screen, which is how a gate quietly becomes a formality. It appears when
+   * it is needed, naming what is missing, and what is typed is recorded
+   * against the evaluation with the name of whoever typed it.
+   */
+  const [awardBlocked, setAwardBlocked] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
   const [approvePending, startApprovePO] = useTransition();
   const [approveError, setApproveError] = useState<string | null>(null);
 
@@ -96,7 +141,13 @@ export function ProcurementPanel({
 
   function addProspect() {
     startProspect(async () => {
-      const result = await inviteProspectToRfq(rfq.id, rfq.case_id, prospectName, prospectEmail, prospectPhone);
+      const result = await inviteProspectToRfq(
+        rfq.id,
+        rfq.case_id,
+        prospectName,
+        prospectEmail,
+        prospectPhone,
+      );
       if (result.error) setProspectError(result.error);
       else {
         setProspectError(null);
@@ -112,29 +163,72 @@ export function ProcurementPanel({
   function copyInviteLink(token: string, inviteId: string) {
     const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
     navigator.clipboard.writeText(link).then(() => {
-      setShareMsg((m) => ({ ...m, [inviteId]: { text: "Copied.", error: false } }));
-      setTimeout(() => setShareMsg((m) => ({ ...m, [inviteId]: { text: "", error: false } })), 2000);
+      setShareMsg((m) => ({
+        ...m,
+        [inviteId]: { text: "Copied.", error: false },
+      }));
+      setTimeout(
+        () =>
+          setShareMsg((m) => ({
+            ...m,
+            [inviteId]: { text: "", error: false },
+          })),
+        2000,
+      );
     });
   }
 
   function emailInviteLink(inviteId: string) {
     startShare(async () => {
       const result = await shareRfqInviteLink(rfq.case_id, inviteId);
-      setShareMsg((m) => ({ ...m, [inviteId]: { text: result.error ?? result.ok ?? "", error: Boolean(result.error) } }));
+      setShareMsg((m) => ({
+        ...m,
+        [inviteId]: {
+          text: result.error ?? result.ok ?? "",
+          error: Boolean(result.error),
+        },
+      }));
     });
   }
 
   function whatsappHref(token: string, phone: string) {
     const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
-    const text = encodeURIComponent(`Request for quotation: ${rfq.title}\n${link}`);
+    const text = encodeURIComponent(
+      `Request for quotation: ${rfq.title}\n${link}`,
+    );
     return `https://wa.me/${phone.replace(/[^\d+]/g, "").replace(/^\+/, "")}?text=${text}`;
   }
 
   function confirmAward(quotationId: string) {
+    // Checked here rather than by disabling the button: a submit that does
+    // nothing and says nothing reads as the page being broken. Using `busy`
+    // to disable it was worse still — it showed a spinner for a field the
+    // person had simply not filled in yet.
+    if (awardBlocked && overrideReason.trim() === "") {
+      setAwardError("Say why you are awarding without it.");
+      return;
+    }
     startAward(async () => {
-      const result = await awardPO(rfq.id, rfq.case_id, quotationId, awardNotes, expectedDelivery || null);
-      if (result.error) setAwardError(result.error);
-      else router.refresh();
+      const result = await awardPO(
+        rfq.id,
+        rfq.case_id,
+        quotationId,
+        awardNotes,
+        expectedDelivery || null,
+        awardBlocked ? overrideReason : null,
+      );
+      if (result.error) {
+        setAwardError(result.error);
+        // The gate's own message names what is outstanding. Recognised by its
+        // wording rather than a code, because the message is raised by the
+        // database function and that is what it has.
+        if (/has not returned/i.test(result.error))
+          setAwardBlocked(result.error);
+        return;
+      }
+      setAwardBlocked(null);
+      setOverrideReason("");
+      router.refresh();
     });
   }
 
@@ -175,21 +269,31 @@ export function ProcurementPanel({
         <CardBody className="flex flex-col gap-2 text-sm">
           <div className="flex items-center gap-2">
             <p className="text-ink">
-              {po.status === "pending_approval" ? "Awaiting approval, for" : "Awarded for"}{" "}
-              <span className="font-semibold tnum">{formatMoney(po.total_cents, { currency: po.currency })}</span>
+              {po.status === "pending_approval"
+                ? "Awaiting approval, for"
+                : "Awarded for"}{" "}
+              <span className="font-semibold tnum">
+                {formatMoney(po.total_cents, { currency: po.currency })}
+              </span>
             </p>
-            {po.status === "pending_approval" && <Badge tone="attention">pending approval</Badge>}
+            {po.status === "pending_approval" && (
+              <Badge tone="attention">pending approval</Badge>
+            )}
           </div>
           <p className="text-xs text-ink-faint">
             Issued {formatDate(po.issued_at)}
-            {po.expected_delivery_date ? ` · expected delivery ${formatDate(po.expected_delivery_date)}` : ""}
+            {po.expected_delivery_date
+              ? ` · expected delivery ${formatDate(po.expected_delivery_date)}`
+              : ""}
           </p>
           {po.status === "pending_approval" && canApprovePO && (
             <div className="flex flex-col items-start gap-1 pt-1">
               <Button size="sm" busy={approvePending} onClick={approveThisPO}>
                 Approve purchase order
               </Button>
-              {approveError && <p className="text-xs text-critical">{approveError}</p>}
+              {approveError && (
+                <p className="text-xs text-critical">{approveError}</p>
+              )}
             </div>
           )}
         </CardBody>
@@ -203,14 +307,33 @@ export function ProcurementPanel({
         title="Procurement"
         subtitle={rfq.title}
         icon={emphasize ? <ShoppingCart className="h-4 w-4" /> : undefined}
-        action={emphasize ? <Badge tone="brand">Current stage</Badge> : undefined}
+        action={
+          emphasize ? <Badge tone="brand">Current stage</Badge> : undefined
+        }
       />
       <CardBody className="flex flex-col gap-5">
+        {/* Above the invitations on purpose: what a bidder must return is part
+            of the invitation, and deciding it afterwards means the first few
+            were asked for something different from the rest. */}
+        <RequirementsPicker
+          rfqId={rfq.id}
+          caseId={rfq.case_id}
+          docTypes={docTypes}
+          templates={templates}
+          current={requirements}
+          locked={requirementsLocked}
+          canEdit={canInvite}
+        />
+
         {canInvite && (
           <div>
-            <p className="mb-2 text-sm font-semibold text-ink">Invite suppliers</p>
+            <p className="mb-2 text-sm font-semibold text-ink">
+              Invite suppliers
+            </p>
             {uninvited.length === 0 ? (
-              <p className="text-xs text-ink-faint">Every active supplier has been invited.</p>
+              <p className="text-xs text-ink-faint">
+                Every active supplier has been invited.
+              </p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {uninvited.map((s) => (
@@ -226,13 +349,25 @@ export function ProcurementPanel({
                 ))}
               </div>
             )}
-            {inviteError && <p className="mt-1 text-xs text-critical">{inviteError}</p>}
+            {inviteError && (
+              <p className="mt-1 text-xs text-critical">{inviteError}</p>
+            )}
 
             <div className="mt-3">
-              <button type="button" onClick={() => setSourcing(true)} className="text-xs font-semibold text-brand hover:underline">
+              <button
+                type="button"
+                onClick={() => setSourcing(true)}
+                className="text-xs font-semibold text-brand hover:underline"
+              >
                 + Source a new supplier not yet in the system
               </button>
-              <Modal open={sourcing} onClose={() => setSourcing(false)} title="Source a new supplier" dismissible={!prospectPending} size="sm">
+              <Modal
+                open={sourcing}
+                onClose={() => setSourcing(false)}
+                title="Source a new supplier"
+                dismissible={!prospectPending}
+                size="sm"
+              >
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -240,11 +375,31 @@ export function ProcurementPanel({
                   }}
                   className="flex flex-col gap-3"
                 >
-                  <TextInput label="Company / contact name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} />
-                  <TextInput label="Email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} hint="Optional" />
-                  <TextInput label="Phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} hint="Optional, for WhatsApp" />
-                  {prospectError && <p className="text-xs text-critical">{prospectError}</p>}
-                  <ModalFormActions onCancel={() => setSourcing(false)} submitLabel="Source" busy={prospectPending} />
+                  <TextInput
+                    label="Company / contact name"
+                    value={prospectName}
+                    onChange={(e) => setProspectName(e.target.value)}
+                  />
+                  <TextInput
+                    label="Email"
+                    value={prospectEmail}
+                    onChange={(e) => setProspectEmail(e.target.value)}
+                    hint="Optional"
+                  />
+                  <TextInput
+                    label="Phone"
+                    value={prospectPhone}
+                    onChange={(e) => setProspectPhone(e.target.value)}
+                    hint="Optional, for WhatsApp"
+                  />
+                  {prospectError && (
+                    <p className="text-xs text-critical">{prospectError}</p>
+                  )}
+                  <ModalFormActions
+                    onCancel={() => setSourcing(false)}
+                    submitLabel="Source"
+                    busy={prospectPending}
+                  />
                 </form>
               </Modal>
             </div>
@@ -256,29 +411,57 @@ export function ProcurementPanel({
             <p className="mb-2 text-sm font-semibold text-ink">Invited</p>
             <div className="flex flex-col divide-y divide-line">
               {invites.map((inv) => {
-                const displayName = inv.invite_name ?? suppliers.find((s) => s.id === inv.supplier_id)?.name ?? "Supplier";
-                const canShare = canInvite && (inv.status === "invited" || inv.status === "viewed");
+                const displayName =
+                  inv.invite_name ??
+                  suppliers.find((s) => s.id === inv.supplier_id)?.name ??
+                  "Supplier";
+                const canShare =
+                  canInvite &&
+                  (inv.status === "invited" || inv.status === "viewed");
                 return (
-                  <div key={inv.id} className="flex flex-col gap-1.5 py-2.5 first:pt-0">
+                  <div
+                    key={inv.id}
+                    className="flex flex-col gap-1.5 py-2.5 first:pt-0"
+                  >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-ink">{displayName}</p>
-                      <Badge tone={INVITE_STATUS_TONE[inv.status]}>{inv.status}</Badge>
+                      <p className="text-sm font-medium text-ink">
+                        {displayName}
+                      </p>
+                      <Badge tone={INVITE_STATUS_TONE[inv.status]}>
+                        {inv.status}
+                      </Badge>
                     </div>
                     {canShare && (
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => copyInviteLink(inv.access_token, inv.id)}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            copyInviteLink(inv.access_token, inv.id)
+                          }
+                        >
                           <Copy className="h-3.5 w-3.5" />
                           Copy link
                         </Button>
-                        {(inv.invite_email || suppliers.find((s) => s.id === inv.supplier_id)?.email) && (
-                          <Button size="sm" variant="secondary" busy={sharePending} onClick={() => emailInviteLink(inv.id)}>
+                        {(inv.invite_email ||
+                          suppliers.find((s) => s.id === inv.supplier_id)
+                            ?.email) && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            busy={sharePending}
+                            onClick={() => emailInviteLink(inv.id)}
+                          >
                             <Mail className="h-3.5 w-3.5" />
                             Email
                           </Button>
                         )}
                         {inv.invite_phone && (
                           <a
-                            href={whatsappHref(inv.access_token, inv.invite_phone)}
+                            href={whatsappHref(
+                              inv.access_token,
+                              inv.invite_phone,
+                            )}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong px-3 text-sm font-medium text-ink hover:border-brand hover:text-brand"
@@ -287,8 +470,14 @@ export function ProcurementPanel({
                           </a>
                         )}
                         {shareMsg[inv.id]?.text && (
-                          <span className={`inline-flex items-center gap-1 text-xs ${shareMsg[inv.id].error ? "text-critical" : "text-ink-faint"}`}>
-                            {shareMsg[inv.id].error ? <AlertTriangle className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs ${shareMsg[inv.id].error ? "text-critical" : "text-ink-faint"}`}
+                          >
+                            {shareMsg[inv.id].error ? (
+                              <AlertTriangle className="h-3 w-3" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
                             {shareMsg[inv.id].text}
                           </span>
                         )}
@@ -303,10 +492,20 @@ export function ProcurementPanel({
 
         {canInvite && invitedSupplierIds.length > 0 && (
           <div>
-            <Button size="sm" variant="secondary" onClick={() => setRecordingQuote(true)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setRecordingQuote(true)}
+            >
               Record a quotation
             </Button>
-            <Modal open={quoteDialogOpen} onClose={() => setRecordingQuote(false)} title="Record a quotation" dismissible={!quotePending} size="sm">
+            <Modal
+              open={quoteDialogOpen}
+              onClose={() => setRecordingQuote(false)}
+              title="Record a quotation"
+              dismissible={!quotePending}
+              size="sm"
+            >
               <form action={quoteAction} className="flex flex-col gap-3">
                 <input type="hidden" name="rfq_id" value={rfq.id} />
                 <input type="hidden" name="case_id" value={rfq.case_id} />
@@ -320,9 +519,21 @@ export function ProcurementPanel({
                       </option>
                     ))}
                 </SelectInput>
-                <NumberInput label="Total quoted" name="total" unit="KES" decimals required />
-                {quoteState.error && <p className="text-xs text-critical">{quoteState.error}</p>}
-                <ModalFormActions onCancel={() => setRecordingQuote(false)} submitLabel="Record" busy={quotePending} />
+                <NumberInput
+                  label="Total quoted"
+                  name="total"
+                  unit="KES"
+                  decimals
+                  required
+                />
+                {quoteState.error && (
+                  <p className="text-xs text-critical">{quoteState.error}</p>
+                )}
+                <ModalFormActions
+                  onCancel={() => setRecordingQuote(false)}
+                  submitLabel="Record"
+                  busy={quotePending}
+                />
               </form>
             </Modal>
           </div>
@@ -330,24 +541,43 @@ export function ProcurementPanel({
 
         {quotations.length > 0 && (
           <div>
-            <p className="mb-2 text-sm font-semibold text-ink">Quotations received</p>
+            <p className="mb-2 text-sm font-semibold text-ink">
+              Quotations received
+            </p>
             <div className="flex flex-col divide-y divide-line">
               {quotations.map((q) => (
-                <div key={q.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+                <div
+                  key={q.id}
+                  className="flex items-center justify-between gap-3 py-2.5 first:pt-0"
+                >
                   <div>
                     <p className="text-sm font-medium text-ink">
-                      {q.supplier_name} {q.submitted_via === "supplier_portal" && <span className="font-normal text-ink-faint">· via portal</span>}
+                      {q.supplier_name}{" "}
+                      {q.submitted_via === "supplier_portal" && (
+                        <span className="font-normal text-ink-faint">
+                          · via portal
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-ink-faint">
-                      {formatMoney(q.total_cents, { currency: q.currency })} · {formatDate(q.submitted_at)}
+                      {formatMoney(q.total_cents, { currency: q.currency })} ·{" "}
+                      {formatDate(q.submitted_at)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setViewingId(q.id)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setViewingId(q.id)}
+                    >
                       View
                     </Button>
                     {canAward && (
-                      <Button size="sm" variant="secondary" onClick={() => setAwardingId(q.id)}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setAwardingId(q.id)}
+                      >
                         Award
                       </Button>
                     )}
@@ -355,7 +585,9 @@ export function ProcurementPanel({
                 </div>
               ))}
             </div>
-            {awardError && <p className="mt-1 text-xs text-critical">{awardError}</p>}
+            {awardError && (
+              <p className="mt-1 text-xs text-critical">{awardError}</p>
+            )}
           </div>
         )}
 
@@ -368,13 +600,22 @@ export function ProcurementPanel({
           {viewingQuote && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-                <Badge tone={viewingQuote.submitted_via === "supplier_portal" ? "info" : "neutral"}>
-                  {viewingQuote.submitted_via === "supplier_portal" ? "Submitted via supplier portal" : "Recorded by staff"}
+                <Badge
+                  tone={
+                    viewingQuote.submitted_via === "supplier_portal"
+                      ? "info"
+                      : "neutral"
+                  }
+                >
+                  {viewingQuote.submitted_via === "supplier_portal"
+                    ? "Submitted via supplier portal"
+                    : "Recorded by staff"}
                 </Badge>
                 <span>{formatDate(viewingQuote.submitted_at)}</span>
               </div>
 
-              {viewingQuote.line_prices && viewingQuote.line_prices.length > 0 ? (
+              {viewingQuote.line_prices &&
+              viewingQuote.line_prices.length > 0 ? (
                 <div className="overflow-x-auto rounded-lg border border-line">
                   <table className="w-full text-left text-sm">
                     <thead>
@@ -383,29 +624,47 @@ export function ProcurementPanel({
                         <th className="p-2.5 font-medium">Qty</th>
                         <th className="p-2.5 font-medium">Unit</th>
                         <th className="p-2.5 font-medium">Unit price</th>
-                        <th className="p-2.5 text-right font-medium">Line total</th>
+                        <th className="p-2.5 text-right font-medium">
+                          Line total
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {viewingQuote.line_prices.map((line, i) => (
-                        <tr key={i} className="border-b border-line last:border-0">
+                        <tr
+                          key={i}
+                          className="border-b border-line last:border-0"
+                        >
                           <td className="p-2.5 text-ink">{line.description}</td>
-                          <td className="p-2.5 tnum text-ink-soft">{line.qty}</td>
+                          <td className="p-2.5 tnum text-ink-soft">
+                            {line.qty}
+                          </td>
                           <td className="p-2.5 text-ink-soft">{line.unit}</td>
-                          <td className="p-2.5 tnum text-ink-soft">{formatMoney(line.unit_price_cents, { currency: viewingQuote.currency })}</td>
+                          <td className="p-2.5 tnum text-ink-soft">
+                            {formatMoney(line.unit_price_cents, {
+                              currency: viewingQuote.currency,
+                            })}
+                          </td>
                           <td className="p-2.5 text-right tnum text-ink-soft">
-                            {formatMoney(line.qty * line.unit_price_cents, { currency: viewingQuote.currency })}
+                            {formatMoney(line.qty * line.unit_price_cents, {
+                              currency: viewingQuote.currency,
+                            })}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-line bg-surface-sunk">
-                        <td colSpan={4} className="p-2.5 text-sm font-medium text-ink">
+                        <td
+                          colSpan={4}
+                          className="p-2.5 text-sm font-medium text-ink"
+                        >
                           Total
                         </td>
                         <td className="p-2.5 text-right text-sm font-semibold tnum text-ink">
-                          {formatMoney(viewingQuote.total_cents, { currency: viewingQuote.currency })}
+                          {formatMoney(viewingQuote.total_cents, {
+                            currency: viewingQuote.currency,
+                          })}
                         </td>
                       </tr>
                     </tfoot>
@@ -413,14 +672,22 @@ export function ProcurementPanel({
                 </div>
               ) : (
                 <p className="text-sm text-ink-soft">
-                  No line-item breakdown on file — recorded as a single total of {formatMoney(viewingQuote.total_cents, { currency: viewingQuote.currency })}.
+                  No line-item breakdown on file — recorded as a single total of{" "}
+                  {formatMoney(viewingQuote.total_cents, {
+                    currency: viewingQuote.currency,
+                  })}
+                  .
                 </p>
               )}
 
               {viewingQuote.notes && (
                 <div>
-                  <p className="mb-1 text-xs font-semibold tracking-wide text-ink-faint uppercase">Notes from the supplier</p>
-                  <p className="rounded-lg border border-line bg-surface-sunk p-3 text-sm whitespace-pre-wrap text-ink-soft">{viewingQuote.notes}</p>
+                  <p className="mb-1 text-xs font-semibold tracking-wide text-ink-faint uppercase">
+                    Notes from the supplier
+                  </p>
+                  <p className="rounded-lg border border-line bg-surface-sunk p-3 text-sm whitespace-pre-wrap text-ink-soft">
+                    {viewingQuote.notes}
+                  </p>
                 </div>
               )}
             </div>
@@ -448,8 +715,41 @@ export function ProcurementPanel({
               onChange={(e) => setExpectedDelivery(e.target.value)}
               hint="Optional"
             />
-            <TextArea label="Notes" value={awardNotes} onChange={(e) => setAwardNotes(e.target.value)} hint="Optional" rows={2} />
-            <ModalFormActions onCancel={() => setAwardingId(null)} submitLabel="Confirm award" busy={awardPending} />
+            <TextArea
+              label="Notes"
+              value={awardNotes}
+              onChange={(e) => setAwardNotes(e.target.value)}
+              hint="Optional"
+              rows={2}
+            />
+
+            {awardBlocked && (
+              <div className="flex flex-col gap-2 rounded-lg border border-critical/25 bg-critical-soft p-3">
+                <p className="text-xs text-critical">{awardBlocked}</p>
+                <TextArea
+                  label="Why are you awarding anyway?"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Tax compliance certificate confirmed by telephone with KRA; copy to follow before payment."
+                />
+                <p className="text-xs text-ink-faint">
+                  Recorded against the evaluation with your name, and visible on
+                  the audit trail.
+                </p>
+              </div>
+            )}
+
+            <ModalFormActions
+              onCancel={() => {
+                setAwardingId(null);
+                setAwardBlocked(null);
+                setOverrideReason("");
+              }}
+              submitLabel={awardBlocked ? "Award anyway" : "Confirm award"}
+              danger={!!awardBlocked}
+              busy={awardPending}
+            />
           </form>
         </Modal>
       </CardBody>
