@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/notify/email";
+import { rfqInviteEmail } from "@/lib/notify/auth-email";
+import { formatDate } from "@/lib/utils";
 
 export interface ProcurementState {
   error: string | null;
@@ -31,13 +34,11 @@ export async function inviteSupplierToRfq(
   const session = await requireSession();
   if (!supplierId) return { error: "Choose a supplier.", ok: null };
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("edospmis_rfq_suppliers")
-    .insert({
-      tenant_id: session.tenant.id,
-      rfq_id: rfqId,
-      supplier_id: supplierId,
-    });
+  const { error } = await supabase.from("edospmis_rfq_suppliers").insert({
+    tenant_id: session.tenant.id,
+    rfq_id: rfqId,
+    supplier_id: supplierId,
+  });
   if (error)
     return {
       error:
@@ -74,6 +75,24 @@ export async function inviteProspectToRfq(
   return { error: null, ok: "Supplier invited." };
 }
 
+/**
+ * The address this request arrived on, so a link mailed to a supplier comes
+ * back to the deployment that sent it.
+ *
+ * NEXT_PUBLIC_SITE_URL is the fallback rather than the source of truth: unset,
+ * it produced "undefined/quote/..." in a real supplier's inbox, and on a
+ * preview deployment it points every link at production.
+ */
+async function requestOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const proto =
+    h.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
 export async function shareRfqInviteLink(
   caseId: string,
   inviteId: string,
@@ -83,13 +102,16 @@ export async function shareRfqInviteLink(
   const { data: invite } = await supabase
     .from("edospmis_rfq_suppliers")
     .select(
-      "access_token, invite_email, invite_name, supplier_id, rfq_id, edospmis_rfqs(title), edospmis_suppliers(name, email)",
+      "access_token, invite_email, invite_name, supplier_id, rfq_id, edospmis_rfqs(title, closing_date), edospmis_suppliers(name, email)",
     )
     .eq("id", inviteId)
     .maybeSingle();
   if (!invite) return { error: "Couldn't find that invitation.", ok: null };
 
-  const rfq = invite.edospmis_rfqs as unknown as { title: string } | null;
+  const rfq = invite.edospmis_rfqs as unknown as {
+    title: string;
+    closing_date: string | null;
+  } | null;
   const supplier = invite.edospmis_suppliers as unknown as {
     name: string;
     email: string | null;
@@ -98,11 +120,57 @@ export async function shareRfqInviteLink(
   if (!email)
     return { error: "This supplier has no email address on file.", ok: null };
 
-  const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${invite.access_token}`;
+  const base = await requestOrigin();
+  const link = `${base}/quote/${invite.access_token}`;
+
+  // What this tender asks for, so the supplier knows before they open the
+  // link rather than after. Mandatory first — those are the ones that will
+  // stop them submitting.
+  const { data: reqRows } = await supabase
+    .from("edospmis_rfq_requirements")
+    .select(
+      "is_mandatory, edospmis_supplier_doc_types(name), edospmis_procurement_templates(name)",
+    )
+    .eq("tenant_id", session.tenant.id)
+    .eq("rfq_id", invite.rfq_id);
+
+  const one = <T>(v: T | T[] | null | undefined): T | null =>
+    Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+
+  const requirements = (reqRows ?? [])
+    .map((row) => {
+      const r = row as unknown as {
+        is_mandatory: boolean;
+        edospmis_supplier_doc_types:
+          { name: string } | { name: string }[] | null;
+        edospmis_procurement_templates:
+          { name: string } | { name: string }[] | null;
+      };
+      return {
+        name:
+          one(r.edospmis_supplier_doc_types)?.name ??
+          one(r.edospmis_procurement_templates)?.name ??
+          null,
+        mandatory: r.is_mandatory,
+      };
+    })
+    .filter((r): r is { name: string; mandatory: boolean } => r.name !== null)
+    .sort(
+      (a, b) =>
+        Number(b.mandatory) - Number(a.mandatory) ||
+        a.name.localeCompare(b.name),
+    )
+    .map((r) => (r.mandatory ? r.name : `${r.name} (optional)`));
+
   const result = await sendEmail({
     to: email,
-    subject: `Request for quotation: ${rfq?.title ?? "New RFQ"} — ${session.tenant.name}`,
-    html: `<p>${session.tenant.name} would like a quotation for <strong>${rfq?.title ?? "a request"}</strong>.</p><p><a href="${link}">Review the items and submit your quote here</a></p><p>This link is unique to you and expires in 30 days.</p>`,
+    ...rfqInviteEmail({
+      link,
+      tenantName: session.tenant.name,
+      rfqTitle: rfq?.title ?? "a request",
+      closingDate: rfq?.closing_date ? formatDate(rfq.closing_date) : null,
+      requirements,
+    }),
   });
   if (!result.ok)
     return { error: result.error ?? "Couldn't send the email.", ok: null };

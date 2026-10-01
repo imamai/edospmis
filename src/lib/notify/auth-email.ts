@@ -60,7 +60,13 @@ function shell({
 }
 
 /** Confirming a new account. */
-export function signupConfirmEmail({ link, name }: { link: string; name?: string | null }) {
+export function signupConfirmEmail({
+  link,
+  name,
+}: {
+  link: string;
+  name?: string | null;
+}) {
   const greeting = name ? `${name}, welcome` : "Welcome";
   return {
     subject: "Confirm your EDOSPMIS account",
@@ -142,6 +148,61 @@ export function passwordResetEmail({ link }: { link: string }) {
       "If you did not ask for this, ignore this message — your current password still works.",
       "",
       "EDOSPMIS by EDOS Centre",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Asking a supplier to quote.
+ *
+ * The one email in this app that goes to somebody outside the organisation
+ * entirely, who has never heard from this tenant and has no account. That
+ * makes the shell matter more here than anywhere else: a bare line of text
+ * with a naked link, from an address a supplier does not recognise, is the
+ * exact shape of a phishing attempt, and mail providers score it that way.
+ *
+ * It also names what the bidder has to return. A supplier who opens the link
+ * expecting to type a price, and finds a tender pack demanding a CR12 and a
+ * tax compliance certificate, closes the tab and rings somebody — which is
+ * the slowest possible way to learn what was wanted.
+ */
+export function rfqInviteEmail({
+  link,
+  tenantName,
+  rfqTitle,
+  closingDate,
+  requirements,
+}: {
+  link: string;
+  tenantName: string;
+  rfqTitle: string;
+  closingDate?: string | null;
+  /** Names of what must be returned, mandatory ones first. Empty for a price-only RFQ. */
+  requirements?: string[];
+}) {
+  const by = closingDate ? ` Please respond by ${closingDate}.` : "";
+  const needed =
+    requirements && requirements.length > 0
+      ? ` You will be asked to return: ${requirements.join(", ")}.`
+      : "";
+
+  return {
+    subject: `Request for quotation: ${rfqTitle} — ${tenantName}`,
+    html: shell({
+      heading: `${tenantName} would like a quotation`,
+      body: `For <strong>${rfqTitle}</strong>.${by}${needed} The link below is unique to you.`,
+      cta: "Review and submit your quote",
+      link,
+    }),
+    text: [
+      `${tenantName} would like a quotation for ${rfqTitle}.${by}${needed}`,
+      "",
+      "Review the items and submit your quote here:",
+      link,
+      "",
+      "This link is unique to you and expires in 30 days.",
+      "",
+      `Sent by ${tenantName} via EDOSPMIS.`,
     ].join("\n"),
   };
 }

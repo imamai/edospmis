@@ -443,19 +443,36 @@ export function ProcurementPanel({
                           <Copy className="h-3.5 w-3.5" />
                           Copy link
                         </Button>
-                        {(inv.invite_email ||
-                          suppliers.find((s) => s.id === inv.supplier_id)
-                            ?.email) && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            busy={sharePending}
-                            onClick={() => emailInviteLink(inv.id)}
-                          >
-                            <Mail className="h-3.5 w-3.5" />
-                            Email
-                          </Button>
-                        )}
+                        {/* Always shown, and disabled with a reason when
+                            there is nowhere to send it. Hiding the button was
+                            worse than useless: somebody looking for it found
+                            nothing, and concluded emailing suppliers did not
+                            work at all rather than that this one supplier has
+                            no address on file. */}
+                        {(() => {
+                          const to =
+                            inv.invite_email ||
+                            suppliers.find((s) => s.id === inv.supplier_id)
+                              ?.email ||
+                            null;
+                          return (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              busy={sharePending}
+                              disabled={!to}
+                              title={
+                                to
+                                  ? `Send the link to ${to}`
+                                  : "No email address on file for this supplier — add one under Suppliers, or copy the link instead."
+                              }
+                              onClick={() => emailInviteLink(inv.id)}
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+                              Email
+                            </Button>
+                          );
+                        })()}
                         {inv.invite_phone && (
                           <a
                             href={whatsappHref(
