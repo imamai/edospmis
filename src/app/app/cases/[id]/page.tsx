@@ -510,6 +510,8 @@ export default async function CaseDetailPage({
           canSubmit={can(session, "finance.invoice.create")}
           canApprove={can(session, "finance.invoice.approve")}
           canRecordPayment={can(session, "finance.payment.approve")}
+          vatEnabled={session.tenant.vat_enabled}
+          vatRate={Number(session.tenant.vat_rate)}
           // What an invoice here will be matched against — the same PO and
           // GRNs the panels above it show. Passed down rather than re-queried:
           // both are already loaded for this page.

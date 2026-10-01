@@ -1,6 +1,7 @@
 export type TenantStatus = "trial" | "active" | "suspended";
 export type MembershipStatus = "invited" | "active" | "suspended";
-export type RoleScopeType = "tenant" | "business_unit" | "branch" | "department";
+export type RoleScopeType =
+  "tenant" | "business_unit" | "branch" | "department";
 
 export interface TenantBranding {
   logo_url?: string | null;
@@ -25,6 +26,10 @@ export interface Tenant {
   numbering_format: string;
   case_sequence: number;
   requires_po_approval: boolean;
+  /** Whether this organisation charges VAT at all. */
+  vat_enabled: boolean;
+  /** The rate as a percentage — 16 for Kenya's standard rate. */
+  vat_rate: number;
   created_at: string;
 }
 
@@ -159,7 +164,8 @@ export type CaseStatus =
   | "finance"
   | "delivery"
   | "closed";
-export type PRStatus = "draft" | "submitted" | "approved" | "rejected" | "returned" | "cancelled";
+export type PRStatus =
+  "draft" | "submitted" | "approved" | "rejected" | "returned" | "cancelled";
 export type Priority = "low" | "normal" | "high" | "urgent";
 export type ApprovalDecision = "pending" | "approved" | "rejected" | "returned";
 
@@ -527,9 +533,11 @@ export interface ContractEvent {
  * ------------------------------------------------------------------ */
 
 export type GrnStatus = "recorded" | "inspected";
-export type GrnItemCondition = "accepted" | "rejected" | "damaged" | "short" | "over";
+export type GrnItemCondition =
+  "accepted" | "rejected" | "damaged" | "short" | "over";
 export type InspectionResult = "pass" | "fail" | "conditional";
-export type DeliveryStatus = "scheduled" | "dispatched" | "delivered" | "confirmed" | "cancelled";
+export type DeliveryStatus =
+  "scheduled" | "dispatched" | "delivered" | "confirmed" | "cancelled";
 export type ProofType = "signature" | "photo" | "otp" | "none";
 
 export interface GrnItem {
@@ -587,8 +595,14 @@ export interface Delivery {
  * Phase 5 — Finance (Invoice + Three-Way Match) + Advanced Controls
  * ------------------------------------------------------------------ */
 
-export type InvoiceStatus = "submitted" | "matched" | "exception" | "approved" | "paid" | "void";
-export type MatchExceptionType = "quantity_mismatch" | "price_mismatch" | "missing_grn" | "over_billing" | "unordered_item";
+export type InvoiceStatus =
+  "submitted" | "matched" | "exception" | "approved" | "paid" | "void";
+export type MatchExceptionType =
+  | "quantity_mismatch"
+  | "price_mismatch"
+  | "missing_grn"
+  | "over_billing"
+  | "unordered_item";
 export type MatchExceptionStatus = "open" | "resolved";
 
 export interface InvoiceItem {
