@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Boxes,
+  FileCheck2,
   Building,
   Building2,
   ClipboardList,
@@ -100,6 +101,12 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Suppliers",
         icon: Truck,
         requires: "procurement.supplier.manage",
+      },
+      {
+        href: "/app/settings/tender",
+        label: "Tender requirements",
+        icon: FileCheck2,
+        requires: "procurement.rfq.create",
       },
       {
         href: "/app/contracts",
