@@ -153,3 +153,103 @@ grant execute on function public.edospmis_notify(uuid, uuid, text, text, text, t
 revoke all on function public.edospmis_resolve_notifications(uuid, text) from public;
 revoke all on function public.edospmis_resolve_notifications(uuid, text) from anon;
 grant execute on function public.edospmis_resolve_notifications(uuid, text) to authenticated;
+
+-- ── Telling one named person ──────────────────────────────────────────
+--
+-- The permission fan-out above covers "whoever does this job". It cannot
+-- cover the requester, who is one particular person and holds no special
+-- permission — and the requester is who most of the downstream events are
+-- actually for. Their request was approved, their goods arrived, their
+-- invoice was paid: none of that is a job anybody holds a permission for.
+--
+-- Silent where the person is the one who caused it, for the same reason as
+-- the fan-out.
+
+create or replace function public.edospmis_notify_user(
+  p_tenant_id uuid,
+  p_user_id uuid,
+  p_case_id uuid,
+  p_kind text,
+  p_title text,
+  p_body text,
+  p_href text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if p_user_id is null or p_user_id = auth.uid() then
+    return;
+  end if;
+
+  insert into public.edospmis_notifications
+    (tenant_id, user_id, case_id, kind, title, body, href)
+  values
+    (p_tenant_id, p_user_id, p_case_id, p_kind, p_title, nullif(p_body, ''), p_href);
+end;
+$$;
+
+revoke all on function public.edospmis_notify_user(uuid, uuid, uuid, text, text, text, text) from public;
+revoke all on function public.edospmis_notify_user(uuid, uuid, uuid, text, text, text, text) from anon;
+grant execute on function public.edospmis_notify_user(uuid, uuid, uuid, text, text, text, text) to authenticated;
+
+-- ── The whole journey ─────────────────────────────────────────────────
+--
+-- Every handover, draft to closed, and who hears about it. This catalogue is
+-- the specification the application follows; it lives here rather than only
+-- in the code because the routing is a procurement decision, not a frontend
+-- one, and the next person to add a stage needs to see the pattern.
+--
+-- "Blocks" means nothing moves until that person acts — those also go out by
+-- email. Everything else is the bell alone, for the reasons at the top of
+-- this file.
+--
+--   STAGE          EVENT                     GOES TO                      BLOCKS
+--   draft          (nothing)                 —                            —
+--                    A draft is the requester's own. Telling them about
+--                    their own typing is how a bell starts being ignored.
+--
+--   approval       pr.submitted              procurement.pr.approve       yes
+--                  pr.approved               the requester                no
+--                  pr.approved               procurement.rfq.create       yes
+--                  pr.rejected               the requester                yes
+--                  pr.returned               the requester                yes
+--                    Returned is the one people miss: the request is
+--                    sitting with them and looks, from their side, exactly
+--                    like one still being considered.
+--
+--   procurement    quotation.received        procurement.rfq.evaluate     no
+--                  bid.submitted             procurement.rfq.evaluate     no
+--                  rfq.closing_today         procurement.rfq.evaluate     no
+--                    A closing date nobody is told about is a closing date
+--                    that passes with two of five bids in.
+--
+--   po_approval    po.pending_approval       procurement.po.approve       yes
+--                  po.issued                 the requester                no
+--                  po.issued                 receiving.grn.create         no
+--
+--   receiving      grn.recorded              finance.invoice.create       no
+--                  grn.recorded              the requester                no
+--                  grn.inspection_failed     procurement.po.view          yes
+--                    A failed inspection is the only receiving event that
+--                    stops the line, so it is the only one that emails.
+--
+--   finance        invoice.submitted         finance.invoice.approve      yes
+--                  invoice.exception         finance.invoice.create       yes
+--                  invoice.approved          finance.payment.approve      yes
+--                  payment.recorded          the requester                no
+--
+--   delivery       delivery.scheduled        the requester                no
+--                  delivery.dispatched       the requester                no
+--
+--   closed         case.closed               the requester                no
+--
+--   any stage      case.on_hold              the requester                no
+--                  case.blocked              the requester                yes
+--                    Blocked means somebody outside the case has to do
+--                    something, and nobody is watching for it.
+--
+-- Each of these resolves when its work is done:
+-- edospmis_resolve_notifications(case_id, kind), called by whoever acts.
