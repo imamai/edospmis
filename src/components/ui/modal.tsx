@@ -15,7 +15,8 @@ const SIZES = {
   full: "max-w-5xl",
 };
 
-const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
 /**
  * Arguments to useSyncExternalStore have to be stable across renders. Inline
@@ -61,9 +62,35 @@ export function Modal({
 }) {
   // "Have we hydrated yet" — a portal needs document.body, which does not
   // exist during the server render. Server snapshot false, client true.
-  const mounted = useSyncExternalStore(subscribeNever, getIsClient, getIsServer);
+  const mounted = useSyncExternalStore(
+    subscribeNever,
+    getIsClient,
+    getIsServer,
+  );
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * The newest `onClose` and `dismissible`, without either of them being a
+   * dependency of the effect below.
+   *
+   * This is not a micro-optimisation, it was a bug: every call site passes
+   * `onClose={() => setThing(false)}`, a fresh function on every render, and
+   * `dismissible={!pending}` flips mid-submit. With those in the dependency
+   * list the effect tore down and re-ran on every keystroke — the cleanup
+   * returning focus to the trigger *outside* the dialog, the effect then
+   * focusing the panel. One character landed in the field and the next went
+   * nowhere, in every dialog in the app.
+   */
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+  // No dependency array on purpose: this runs after every commit, so the refs
+  // are current before any key can be pressed, and it holds nothing that the
+  // focus effect below could react to.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -76,13 +103,15 @@ export function Modal({
     panel?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && dismissible) {
+      if (e.key === "Escape" && dismissibleRef.current) {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !panel) return;
-      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE),
+      );
       if (focusable.length === 0) return;
       const firstEl = focusable[0];
       const lastEl = focusable[focusable.length - 1];
@@ -100,7 +129,9 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       returnFocusRef.current?.focus();
     };
-  }, [open, dismissible, onClose]);
+    // Opening and closing is the whole of it. Anything else here re-runs the
+    // teardown — and the teardown moves focus.
+  }, [open]);
 
   if (!mounted || !open) return null;
 
@@ -123,14 +154,20 @@ export function Modal({
           // On a phone it rises from the bottom edge, which is where a thumb
           // is; from sm: up it is a centred dialog as before.
           "rounded-t-2xl sm:rounded-xl",
-          flush ? "flex h-[92dvh] flex-col overflow-hidden" : "max-h-[90dvh] overflow-y-auto",
+          flush
+            ? "flex h-[92dvh] flex-col overflow-hidden"
+            : "max-h-[90dvh] overflow-y-auto",
           SIZES[size],
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
-            <h2 className="truncate text-[0.9375rem] font-semibold text-ink">{title}</h2>
-            {description && <p className="mt-0.5 text-xs text-ink-faint">{description}</p>}
+            <h2 className="truncate text-[0.9375rem] font-semibold text-ink">
+              {title}
+            </h2>
+            {description && (
+              <p className="mt-0.5 text-xs text-ink-faint">{description}</p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {headerActions}
@@ -146,7 +183,9 @@ export function Modal({
             )}
           </div>
         </div>
-        <div className={cn(flush ? "min-h-0 flex-1" : "px-4 py-4 sm:px-5")}>{children}</div>
+        <div className={cn(flush ? "min-h-0 flex-1" : "px-4 py-4 sm:px-5")}>
+          {children}
+        </div>
       </div>
     </div>,
     document.body,
