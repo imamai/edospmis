@@ -30,6 +30,7 @@ export function PanelSteps({
   current,
   complete,
   next,
+  terminal,
 }: {
   steps: PanelStep[];
   current: string;
@@ -37,10 +38,21 @@ export function PanelSteps({
   complete: boolean;
   /** What to do now — including when the answer is to wait, which is a real state. */
   next: string;
+  /**
+   * The chain ended badly — rejected, returned. Shown as its own end state
+   * rather than as another step, because it is not one: it is where the
+   * sequence stopped.
+   */
+  terminal?: { key: string; label: string } | null;
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <WorkflowStepper stages={steps} currentKey={current} complete={complete} />
+      <WorkflowStepper
+        stages={steps}
+        currentKey={current}
+        complete={complete}
+        terminal={terminal}
+      />
       <p className="text-xs text-ink-soft">
         <span className="font-semibold text-ink">Next: </span>
         {next}

@@ -31,6 +31,7 @@ import { FinancePanel } from "./finance-panel";
 import { StageTimingCard } from "./stage-timing-card";
 import { HoldBlockedControls } from "./hold-blocked-controls";
 import { AttachmentsPanel } from "./attachments-panel";
+import { PanelSteps } from "./panel-steps";
 import { CancelCaseButton } from "./cancel-case-button";
 import { CloseCaseButton } from "./close-case-button";
 import { CaseSummaryHeader } from "./case-summary-header";
@@ -287,6 +288,20 @@ export default async function CaseDetailPage({
           subtitle={requesterName ? `Raised by ${requesterName}` : undefined}
         />
         <CardBody className="flex flex-col gap-4">
+          {/* A line, not a stepper. Raising a request is one transition —
+              draft, then submitted — and a two-chevron chain where both are
+              always green is furniture, not information. What it does share
+              with every other panel is the "Next:" line, so the vocabulary is
+              the same everywhere even where the shape cannot be. */}
+          <p className="text-xs text-ink-soft">
+            <span className="font-semibold text-ink">Next: </span>
+            {pr.status === "draft"
+              ? canSubmit
+                ? "Finish the details and submit it for approval."
+                : "This is still a draft with its requester."
+              : `Submitted ${formatDate(c.opened_at)} — it has left the requester's hands.`}
+          </p>
+
           {pr.justification && (
             <p className="text-sm text-ink-soft">{pr.justification}</p>
           )}
@@ -422,47 +437,91 @@ export default async function CaseDetailPage({
       {approvals.length > 0 && (
         <Card>
           <CardHeader title="Approval history" />
-          <CardBody className="flex flex-col divide-y divide-line">
-            {approvals.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-ink">{a.role_name}</p>
-                  {a.decided_by_name && (
-                    <p className="text-xs text-ink-faint">
-                      {a.decided_by_name}
-                    </p>
-                  )}
-                  {a.comment && (
-                    <p className="mt-0.5 text-xs text-ink-soft">
-                      &ldquo;{a.comment}&rdquo;
-                    </p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <Badge
-                    tone={
-                      a.status === "approved"
-                        ? "good"
-                        : a.status === "rejected"
-                          ? "critical"
-                          : a.status === "returned"
-                            ? "attention"
-                            : "neutral"
+          <CardBody className="flex flex-col gap-3">
+            {/* A chain, not a list. Approval rules can route a request
+                through several roles in order, and the list showed them as
+                equal rows — so "two of three have approved, it is sitting
+                with Finance" had to be worked out by reading every badge.
+                The one still deciding is the current step. */}
+            <PanelSteps
+              steps={approvals.map((a) => ({
+                key: a.id,
+                label: a.role_name,
+              }))}
+              current={
+                approvals.find((a) => a.status === "pending")?.id ?? "done"
+              }
+              complete={
+                approvals.length > 0 &&
+                approvals.every((a) => a.status === "approved")
+              }
+              terminal={
+                approvals.some(
+                  (a) => a.status === "rejected" || a.status === "returned",
+                )
+                  ? {
+                      key: "ended",
+                      label: approvals.some((a) => a.status === "rejected")
+                        ? "Rejected"
+                        : "Returned",
                     }
-                  >
-                    {a.status}
-                  </Badge>
-                  {a.decided_at && (
-                    <p className="mt-1 text-xs text-ink-faint">
-                      {formatDate(a.decided_at)}
+                  : null
+              }
+              next={
+                approvals.some((a) => a.status === "rejected")
+                  ? "Rejected. It cannot go further without being raised again."
+                  : approvals.some((a) => a.status === "returned")
+                    ? "Returned to the requester to correct and resubmit."
+                    : approvals.some((a) => a.status === "pending")
+                      ? `Waiting on ${approvals.find((a) => a.status === "pending")?.role_name} to decide.`
+                      : "Fully approved."
+              }
+            />
+
+            <div className="flex flex-col divide-y divide-line">
+              {approvals.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-ink">
+                      {a.role_name}
                     </p>
-                  )}
+                    {a.decided_by_name && (
+                      <p className="text-xs text-ink-faint">
+                        {a.decided_by_name}
+                      </p>
+                    )}
+                    {a.comment && (
+                      <p className="mt-0.5 text-xs text-ink-soft">
+                        &ldquo;{a.comment}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <Badge
+                      tone={
+                        a.status === "approved"
+                          ? "good"
+                          : a.status === "rejected"
+                            ? "critical"
+                            : a.status === "returned"
+                              ? "attention"
+                              : "neutral"
+                      }
+                    >
+                      {a.status}
+                    </Badge>
+                    {a.decided_at && (
+                      <p className="mt-1 text-xs text-ink-faint">
+                        {formatDate(a.decided_at)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </CardBody>
         </Card>
       )}
