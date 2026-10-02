@@ -16,6 +16,7 @@ export default async function SuppliersPage() {
   }
 
   const suppliers = await getSuppliers(session.tenant.id, true);
+  const pendingApproval = suppliers.filter((s) => !s.is_active).length;
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
@@ -24,6 +25,22 @@ export default async function SuppliersPage() {
         <p className="mt-1 text-sm text-ink-faint">
           Who gets invited to quote on an RFQ.
         </p>
+        {/* Said here because it is not guessable, and the question it answers
+            gets asked: "why are these suppliers inactive?" A supplier who
+            quotes through their tender link is created for you, switched off,
+            and nothing has ever pointed that out — so suppliers you have since
+            issued purchase orders to can still be sitting here unapproved. */}
+        {pendingApproval > 0 && (
+          <p className="mt-2 rounded-lg border border-attention/25 bg-attention-soft px-3 py-2 text-xs text-attention">
+            {pendingApproval === 1
+              ? "1 supplier is inactive."
+              : `${pendingApproval} suppliers are inactive.`}{" "}
+            A supplier who submits a quotation through their own tender link is
+            added here automatically and left inactive for you to check first.
+            Inactive suppliers don&rsquo;t appear in the list of who to invite
+            next, so reactivate the ones you intend to keep buying from.
+          </p>
+        )}
       </div>
 
       <Card>

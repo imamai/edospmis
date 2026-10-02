@@ -321,7 +321,7 @@ export async function mailUnsentRfqInvites(
 
   const { data: rows } = await supabase
     .from("edospmis_rfq_suppliers")
-    .select("id, invite_email, edospmis_suppliers(email, is_active)")
+    .select("id, invite_email, edospmis_suppliers(email)")
     .eq("tenant_id", session.tenant.id)
     .eq("rfq_id", rfqId)
     .eq("status", "invited")
@@ -329,15 +329,18 @@ export async function mailUnsentRfqInvites(
     .order("invited_at");
 
   /**
-   * An archived supplier is skipped, and so is one with no address.
+   * Only an address decides it — not whether the supplier is active.
    *
-   * Both so this agrees with the dialog that asked. The panel only ever loads
-   * active suppliers, so a row pointing at an archived one shows there as
-   * having no address — and a confirmation naming twelve recipients that then
-   * mails fourteen is worse than no confirmation at all. It is also the right
-   * answer on its own terms: archiving a supplier is saying you have stopped
-   * doing business with them, and the per-row Email button is already
-   * disabled for exactly these rows.
+   * This did exclude inactive suppliers, which was wrong for a reason the flag
+   * hides: `is_active` false means two different things. A supplier who quotes
+   * through the portal is created inactive pending staff approval, and on this
+   * system all three inactive suppliers are that — each with purchase orders
+   * against them. Skipping them would have silently dropped real trading
+   * partners from a send the buyer had just confirmed.
+   *
+   * They are not hidden from the decision either: the confirmation dialog
+   * marks them, so a genuinely archived supplier can be spotted before the
+   * mail goes rather than being quietly included or quietly dropped.
    */
   const one = <T>(v: T | T[] | null | undefined): T | null =>
     Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
@@ -346,11 +349,9 @@ export async function mailUnsentRfqInvites(
     if (row.invite_email) return true;
     const supplier = one(
       row.edospmis_suppliers as
-        | { email: string | null; is_active: boolean }
-        | { email: string | null; is_active: boolean }[]
-        | null,
+        { email: string | null } | { email: string | null }[] | null,
     );
-    return Boolean(supplier?.is_active && supplier.email);
+    return Boolean(supplier?.email);
   });
 
   if (pending.length === 0 && (rows ?? []).length > 0)

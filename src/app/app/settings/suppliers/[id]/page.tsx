@@ -67,7 +67,7 @@ export default async function SupplierDetailPage({
           <div className="flex items-center gap-3">
             <EditSupplierButton supplier={s} />
             <Badge tone={s.is_active ? "good" : "neutral"}>
-              {s.is_active ? "active" : "archived"}
+              {s.is_active ? "active" : "inactive"}
             </Badge>
           </div>
         </div>

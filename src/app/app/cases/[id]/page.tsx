@@ -95,8 +95,20 @@ export default async function CaseDetailPage({
   const procurementDetail = pastProcurement
     ? await getProcurementDetail(session.tenant.id, c.id)
     : null;
+  /**
+   * Inactive ones included, and filtered where it matters instead.
+   *
+   * Active-only looked right and was not: a supplier who quotes through the
+   * portal is created inactive, awaiting staff approval, so three suppliers
+   * this tenant has issued purchase orders to were invisible here. Their
+   * invitation rows rendered as "Supplier" with no address, their quotations
+   * could not be recorded, and they could not be emailed. The panel filters
+   * to active suppliers where the question is who to invite next.
+   */
   const suppliers =
-    c.status === "procurement" ? await getSuppliers(session.tenant.id) : [];
+    c.status === "procurement"
+      ? await getSuppliers(session.tenant.id, true)
+      : [];
 
   // The tender pack, only once there is an RFQ to hang it on.
   const rfqId = procurementDetail?.rfq?.id ?? null;

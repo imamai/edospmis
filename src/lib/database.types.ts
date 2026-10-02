@@ -409,7 +409,14 @@ export interface Quotation {
   created_at: string;
 }
 
-export type RfqInviteStatus = "invited" | "viewed" | "submitted" | "declined";
+export type RfqInviteStatus =
+  | "invited"
+  | "viewed"
+  | "submitted"
+  /** They told us no. */
+  | "declined"
+  /** The tender closed without them submitting. Set by trigger when the RFQ closes. */
+  | "lapsed";
 
 export interface RfqInvite {
   id: string;

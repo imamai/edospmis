@@ -68,6 +68,10 @@ const INVITE_STATUS_TONE: Record<
   viewed: "info",
   submitted: "good",
   declined: "critical",
+  // Neutral, not critical: nobody did anything wrong. The tender closed and
+  // this supplier had not submitted, which on an awarded tender is simply
+  // what happened to everyone who did not win.
+  lapsed: "neutral",
 };
 
 export function ProcurementPanel({
@@ -100,7 +104,13 @@ export function ProcurementPanel({
   const router = useRouter();
   const { rfq, invites, invitedSupplierIds, quotations, po } = detail;
   const invitedSet = new Set(invitedSupplierIds);
-  const uninvited = suppliers.filter((s) => !invitedSet.has(s.id));
+  // Active only: this is the "who shall we invite" list, and an archived
+  // supplier is one you have stopped buying from. Resolving the name and
+  // address of somebody already invited uses the full list, because by then
+  // the decision has been made and hiding them only breaks the display.
+  const uninvited = suppliers.filter(
+    (s) => !invitedSet.has(s.id) && s.is_active,
+  );
 
   /**
    * Where this tender has got to, inside the procurement stage.
@@ -1050,6 +1060,16 @@ export function ProcurementPanel({
                     >
                       <span className="font-medium text-ink">
                         {inv.invite_name ?? supplier?.name ?? "Supplier"}
+                        {/* Flagged rather than filtered out. "Inactive" covers
+                            both a supplier you archived and one who quoted
+                            through the portal and was never approved — and
+                            the system cannot tell those apart, so the person
+                            confirming the send decides. */}
+                        {supplier && !supplier.is_active && (
+                          <span className="ml-1.5 font-normal text-attention">
+                            inactive
+                          </span>
+                        )}
                       </span>
                       <span className="text-ink-faint">
                         {inv.invite_email ?? supplier?.email}

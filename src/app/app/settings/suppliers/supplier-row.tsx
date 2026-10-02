@@ -42,7 +42,7 @@ export function SupplierRow({ supplier }: { supplier: Supplier }) {
       </td>
       <td className="py-2.5 pr-4">
         <Badge tone={supplier.is_active ? "good" : "neutral"}>
-          {supplier.is_active ? "active" : "archived"}
+          {supplier.is_active ? "active" : "inactive"}
         </Badge>
       </td>
       <td className="py-2.5 text-right">
