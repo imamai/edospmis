@@ -380,7 +380,10 @@ export function FinancePanel({
           ? "The invoice matches. Approve it for payment."
           : financeStep === "pay"
             ? "Approved — record the payment once it leaves."
-            : "Paid in full. Nothing further here.";
+            : // Not "nothing further": payment stopped closing the case, and
+              // saying otherwise leaves somebody waiting for a close that is
+              // now waiting on them.
+              "Paid in full. The case closes once the delivery is confirmed.";
 
   const receiptRecorded = matchBasis.grnNumbers.length > 0;
   const canBillMore = receiptRecorded && remainingNet > 0;
