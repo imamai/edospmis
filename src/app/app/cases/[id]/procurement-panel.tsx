@@ -6,6 +6,7 @@ import {
   FileText,
   Copy,
   Mail,
+  MailCheck,
   Check,
   AlertTriangle,
   ShoppingCart,
@@ -14,6 +15,7 @@ import {
   inviteSupplierToRfq,
   inviteProspectToRfq,
   shareRfqInviteLink,
+  mailUnsentRfqInvites,
   quoteLinkOrigin,
   recordQuotation,
   awardPO,
@@ -220,6 +222,43 @@ export function ProcurementPanel({
     Record<string, { text: string; error: boolean }>
   >({});
   const [sharePending, startShare] = useTransition();
+
+  /**
+   * Suppliers on this RFQ who were never actually written to.
+   *
+   * Inviting used to send nothing, so this is a real backlog rather than a
+   * hypothetical one. Scoped to those still at "invited": a supplier who has
+   * opened their link was reached some other way and is not waiting on us.
+   */
+  /**
+   * Nothing is shared once the tender is closed.
+   *
+   * The supplier-facing page already refuses a closed RFQ, so every link
+   * offered here would land them on "this tender is closed" — and an
+   * invitation to quote on work already awarded is worse than no invitation.
+   * Most of the unsent backlog on the live system is exactly this: historical
+   * rows on tenders long settled.
+   */
+  const rfqOpen = rfq.status === "open";
+  const unsent = rfqOpen
+    ? invites.filter((i) => i.status === "invited" && !i.emailed_at)
+    : [];
+  const unsentWithEmail = unsent.filter(
+    (i) =>
+      i.invite_email || suppliers.find((s) => s.id === i.supplier_id)?.email,
+  );
+  const [confirmingBulk, setConfirmingBulk] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [bulkPending, startBulk] = useTransition();
+
+  function sendUnsent() {
+    startBulk(async () => {
+      const result = await mailUnsentRfqInvites(rfq.id, rfq.case_id);
+      setBulkMsg(result.error ?? result.ok);
+      setConfirmingBulk(false);
+      router.refresh();
+    });
+  }
 
   /**
    * Where a quote link points, asked of the server rather than read from
@@ -602,7 +641,26 @@ export function ProcurementPanel({
         {invites.length > 0 && (
           <div className={active("responses")}>
             {marker("responses")}
-            <p className="mb-2 text-sm font-semibold text-ink">Invited</p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-ink">Invited</p>
+              {/* Shown only when there is a backlog to clear, and labelled
+                  with the count — a button that says "send unsent" with
+                  nothing unsent invites a click that does nothing. */}
+              {canInvite && unsentWithEmail.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  busy={bulkPending}
+                  onClick={() => setConfirmingBulk(true)}
+                >
+                  <MailCheck className="h-3.5 w-3.5" />
+                  Email {unsentWithEmail.length} unsent
+                </Button>
+              )}
+            </div>
+            {bulkMsg && (
+              <p className="mb-2 text-xs text-ink-faint">{bulkMsg}</p>
+            )}
             <div className="flex flex-col divide-y divide-line">
               {invites.map((inv) => {
                 const displayName =
@@ -611,6 +669,7 @@ export function ProcurementPanel({
                   "Supplier";
                 const canShare =
                   canInvite &&
+                  rfqOpen &&
                   (inv.status === "invited" || inv.status === "viewed");
                 const to =
                   inv.invite_email ||
@@ -630,6 +689,7 @@ export function ProcurementPanel({
                  * the link or sent a quotation, how they heard is history.
                  */
                 const awaiting =
+                  rfqOpen &&
                   inv.status === "invited" &&
                   (inv.emailed_at
                     ? null
@@ -954,6 +1014,65 @@ export function ProcurementPanel({
             />
           </form>
         </Modal>
+
+        {/*
+          Confirmed before it fires. Every other action in this panel affects
+          one record; this one sends mail to a dozen outside companies at once,
+          and nothing recalls it. The dialog names them, because "Email 16
+          unsent" is a count and not a list — the point of reading it is to
+          notice the address that is wrong before it bounces, which is exactly
+          how the one real bounce on this system happened.
+        */}
+        {confirmingBulk && (
+          <Modal
+            open={confirmingBulk}
+            onClose={() => setConfirmingBulk(false)}
+            title={`Email ${unsentWithEmail.length} supplier${unsentWithEmail.length === 1 ? "" : "s"}`}
+            description="These suppliers were invited but never actually emailed. Each gets their own link."
+            dismissible={!bulkPending}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendUnsent();
+              }}
+              className="flex flex-col gap-3"
+            >
+              <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-lg border border-line p-2.5">
+                {unsentWithEmail.map((inv) => {
+                  const supplier = suppliers.find(
+                    (sup) => sup.id === inv.supplier_id,
+                  );
+                  return (
+                    <li
+                      key={inv.id}
+                      className="flex items-baseline justify-between gap-3 text-xs"
+                    >
+                      <span className="font-medium text-ink">
+                        {inv.invite_name ?? supplier?.name ?? "Supplier"}
+                      </span>
+                      <span className="text-ink-faint">
+                        {inv.invite_email ?? supplier?.email}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {unsent.length > unsentWithEmail.length && (
+                <p className="text-xs text-attention">
+                  {unsent.length - unsentWithEmail.length} more have no email
+                  address on file and will be skipped. Add one under Settings
+                  &rsaquo; Suppliers, or copy their link instead.
+                </p>
+              )}
+              <ModalFormActions
+                onCancel={() => setConfirmingBulk(false)}
+                submitLabel="Send them now"
+                busy={bulkPending}
+              />
+            </form>
+          </Modal>
+        )}
       </CardBody>
     </Card>
   );

@@ -261,6 +261,147 @@ export async function shareRfqInviteLink(
 }
 
 /**
+ * Sending the invitations that were never sent.
+ *
+ * Needed because of a bug this codebase carried for a while: inviting a
+ * supplier inserted a row and sent nothing, so the live data holds a backlog
+ * of suppliers sitting at "invited" who were never actually asked. Inviting
+ * now sends, but that does nothing for the ones already on the list.
+ *
+ * WHAT COUNTS AS UNSENT. Status still 'invited', and no send on record. A
+ * supplier at 'viewed' has opened their link — they were reached, by a copied
+ * link or WhatsApp, and are not waiting on us. Mailing them again would be
+ * noise, and noise from a procurement system is how a buyer's mail starts
+ * going to a spam folder.
+ *
+ * SEQUENTIAL, AND CAPPED. One send at a time, because Resend rate-limits and a
+ * burst of parallel posts would have some rejected with nothing to show which.
+ * Capped per click so the action cannot outrun a serverless request timeout
+ * halfway through and leave the caller unable to tell what went out; the
+ * message says when more remain.
+ *
+ * Partial success is the normal case, not an error: some suppliers have no
+ * address on file. Each outcome is recorded against its own row as it happens,
+ * so a run that dies early still leaves an accurate record of what was sent.
+ */
+const UNSENT_BATCH = 20;
+
+export async function mailUnsentRfqInvites(
+  rfqId: string,
+  caseId: string,
+): Promise<ProcurementState> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  /**
+   * A closed tender invites nobody.
+   *
+   * Checked because the backlog this exists to clear is mostly historical: of
+   * the unsent invitations on the live system, three quarters belong to RFQs
+   * that were awarded, received or paid months ago. Mailing those would ask a
+   * dozen suppliers to quote on work already given to somebody else — a worse
+   * outcome than the silence it set out to fix, and one you cannot take back.
+   *
+   * Gated here and not only in the panel, because this is the guarantee: the
+   * button can be hidden, the action cannot be un-called.
+   */
+  const { data: rfq } = await supabase
+    .from("edospmis_rfqs")
+    .select("status")
+    .eq("id", rfqId)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!rfq) return { error: "Couldn't find that request.", ok: null };
+  if (rfq.status !== "open")
+    return {
+      error:
+        "This tender is closed. Suppliers can't be invited to quote on it now.",
+      ok: null,
+    };
+
+  const { data: rows } = await supabase
+    .from("edospmis_rfq_suppliers")
+    .select("id, invite_email, edospmis_suppliers(email, is_active)")
+    .eq("tenant_id", session.tenant.id)
+    .eq("rfq_id", rfqId)
+    .eq("status", "invited")
+    .is("emailed_at", null)
+    .order("invited_at");
+
+  /**
+   * An archived supplier is skipped, and so is one with no address.
+   *
+   * Both so this agrees with the dialog that asked. The panel only ever loads
+   * active suppliers, so a row pointing at an archived one shows there as
+   * having no address — and a confirmation naming twelve recipients that then
+   * mails fourteen is worse than no confirmation at all. It is also the right
+   * answer on its own terms: archiving a supplier is saying you have stopped
+   * doing business with them, and the per-row Email button is already
+   * disabled for exactly these rows.
+   */
+  const one = <T>(v: T | T[] | null | undefined): T | null =>
+    Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+
+  const pending = (rows ?? []).filter((row) => {
+    if (row.invite_email) return true;
+    const supplier = one(
+      row.edospmis_suppliers as
+        | { email: string | null; is_active: boolean }
+        | { email: string | null; is_active: boolean }[]
+        | null,
+    );
+    return Boolean(supplier?.is_active && supplier.email);
+  });
+
+  if (pending.length === 0 && (rows ?? []).length > 0)
+    return {
+      error: null,
+      ok: "None of the remaining invitations have an email address on file.",
+    };
+  if (pending.length === 0)
+    return { error: null, ok: "Every invitation has already been sent." };
+
+  const batch = pending.slice(0, UNSENT_BATCH);
+  let sent = 0;
+  const failures: string[] = [];
+
+  for (const row of batch) {
+    const result = await mailRfqInvite(
+      row.id,
+      session.tenant.id,
+      session.tenant.name,
+    );
+    if (result.ok) sent += 1;
+    else failures.push(result.message);
+  }
+
+  revalidatePath(`/app/cases/${caseId}`);
+
+  const parts: string[] = [
+    sent === 1 ? "Emailed 1 supplier." : `Emailed ${sent} suppliers.`,
+  ];
+  // Counted by reason rather than listed one by one: sixteen rows each saying
+  // "no email address on file" is a wall of text that hides the one failure
+  // that was something else.
+  const noAddress = failures.filter((f) =>
+    f.includes("no email address"),
+  ).length;
+  if (noAddress > 0)
+    parts.push(
+      `${noAddress} ${noAddress === 1 ? "has" : "have"} no email address on file.`,
+    );
+  const other = failures.length - noAddress;
+  if (other > 0)
+    parts.push(
+      `${other} failed to send — try again, or email those individually to see why.`,
+    );
+  const remaining = pending.length - batch.length;
+  if (remaining > 0) parts.push(`${remaining} still to go — run it again.`);
+
+  return { error: null, ok: parts.join(" ") };
+}
+
+/**
  * The base URL for a quote link, for the client to build Copy-link and
  * WhatsApp hrefs with.
  *
