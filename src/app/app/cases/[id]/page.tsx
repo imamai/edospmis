@@ -536,32 +536,33 @@ export default async function CaseDetailPage({
         />
       )}
 
-      {/* Delivery is outbound (this tenant -> its own client), so it is
-          offered once a case has a client attached — a purely internal
-          requisition ends at receiving and has nothing to deliver.
+      {/* Shown for every case with an issued purchase order.
 
-          But an existing delivery is always shown, client or not. Gating the
-          panel on the client alone hid it from any case that had one: a
-          dispatched delivery with no client left the case sitting in the
-          delivery stage with no way to confirm it and nothing on screen
-          explaining why. PR-2026-000007 in the demo tenant is exactly that.
-          A client decides whether delivery is offered; it cannot decide
-          whether a delivery already under way is visible. */}
-      {(clientName || fulfilmentDetail?.delivery) &&
-        poIssued &&
-        fulfilmentDetail && (
-          <DeliveryPanel
-            caseId={c.id}
-            delivery={fulfilmentDetail.delivery}
-            canAssign={can(session, "delivery.assign")}
-            canDispatch={can(session, "delivery.dispatch")}
-            canComplete={can(session, "delivery.complete")}
-            emphasize={isCurrentStage(
-              PANEL_STAGE_KEYS.delivery,
-              c.current_stage_key,
-            )}
-          />
-        )}
+          It used to be gated on the case having a client, on the reasoning
+          that delivery is outbound and a purely internal requisition has
+          nothing to deliver. That reasoning does not survive contact with how
+          these are actually used: goods bought for the office still have to
+          get from the stores to whoever asked for them, and that trip is
+          worth scheduling and confirming. Hiding the stage also made it the
+          one stage with no panel at all, which reads as broken rather than
+          as deliberate.
+
+          Delivery stays optional — a case nobody schedules one for simply
+          closes at payment. What has gone is the system deciding, on the
+          basis of a client field, that the question does not apply. */}
+      {poIssued && fulfilmentDetail && (
+        <DeliveryPanel
+          caseId={c.id}
+          delivery={fulfilmentDetail.delivery}
+          canAssign={can(session, "delivery.assign")}
+          canDispatch={can(session, "delivery.dispatch")}
+          canComplete={can(session, "delivery.complete")}
+          emphasize={isCurrentStage(
+            PANEL_STAGE_KEYS.delivery,
+            c.current_stage_key,
+          )}
+        />
+      )}
 
       <StageTimingCard durations={stageDurations} />
 

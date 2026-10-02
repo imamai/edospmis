@@ -391,6 +391,23 @@ export function ProcurementPanel({
           }
         />
         <CardBody className="flex flex-col gap-2 text-sm">
+          {/* The stepper belongs here too. This branch replaces the whole
+              panel once a purchase order exists, so without it procurement
+              was the one stage whose steps vanished the moment it finished —
+              while receiving and finance below it stayed visible and green.
+              Somebody reading the case could no longer tell that sourcing had
+              happened at all, let alone that it was done. */}
+          <PanelSteps
+            steps={PROCUREMENT_STEPS}
+            current={po.status === "pending_approval" ? "po" : "done"}
+            complete={po.status !== "pending_approval"}
+            next={
+              po.status === "pending_approval"
+                ? "The purchase order needs approving before it goes to the supplier."
+                : "Sourcing is finished. The order is with the supplier."
+            }
+          />
+
           <div className="flex items-center gap-2">
             <p className="text-ink">
               {po.status === "pending_approval"
