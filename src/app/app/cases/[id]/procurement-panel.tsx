@@ -14,6 +14,7 @@ import {
   inviteSupplierToRfq,
   inviteProspectToRfq,
   shareRfqInviteLink,
+  quoteLinkOrigin,
   recordQuotation,
   awardPO,
   approvePO,
@@ -220,6 +221,38 @@ export function ProcurementPanel({
   >({});
   const [sharePending, startShare] = useTransition();
 
+  /**
+   * Where a quote link points, asked of the server rather than read from
+   * NEXT_PUBLIC_SITE_URL in the browser.
+   *
+   * The emailed link already works this way — `requestOrigin` on the server
+   * exists because that variable once produced "undefined/quote/..." in a
+   * real supplier's inbox. Copy link and WhatsApp still trusted it, so on a
+   * deployment where it is unset or stale the emailed invitation worked while
+   * a pasted one was broken, which is the hardest version of this to notice.
+   *
+   * Falls back to the current page's own origin, which on a browser is always
+   * the deployment the person is looking at.
+   */
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    quoteLinkOrigin()
+      .then((o) => {
+        if (live) setOrigin(o);
+      })
+      .catch(() => {
+        if (live) setOrigin(window.location.origin);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  // The page's own origin covers the moment before the server answers, so a
+  // link copied immediately is still absolute and still correct.
+  const linkBase =
+    origin ?? (typeof window === "undefined" ? "" : window.location.origin);
+
   const [recordingQuote, setRecordingQuote] = useState(false);
   const [quoteState, quoteAction, quotePending] = useActionState(
     recordQuotation,
@@ -285,7 +318,7 @@ export function ProcurementPanel({
   }
 
   function copyInviteLink(token: string, inviteId: string) {
-    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
+    const link = `${linkBase}/quote/${token}`;
     navigator.clipboard.writeText(link).then(() => {
       setShareMsg((m) => ({
         ...m,
@@ -316,7 +349,7 @@ export function ProcurementPanel({
   }
 
   function whatsappHref(token: string, phone: string) {
-    const link = `${process.env.NEXT_PUBLIC_SITE_URL}/quote/${token}`;
+    const link = `${linkBase}/quote/${token}`;
     const text = encodeURIComponent(
       `Request for quotation: ${rfq.title}\n${link}`,
     );
@@ -579,6 +612,30 @@ export function ProcurementPanel({
                 const canShare =
                   canInvite &&
                   (inv.status === "invited" || inv.status === "viewed");
+                const to =
+                  inv.invite_email ||
+                  suppliers.find((s) => s.id === inv.supplier_id)?.email ||
+                  null;
+                /**
+                 * Whether this supplier has actually been written to.
+                 *
+                 * The status badge says "invited" from the moment the row is
+                 * inserted, which was true of the record and not of the
+                 * supplier: inviting used to send nothing, so a supplier
+                 * nobody had contacted was indistinguishable from one who had
+                 * read the mail. Only `status` moving to viewed or submitted
+                 * proved contact, and by then it was too late to wonder.
+                 *
+                 * Shown only while it still matters. Once they have opened
+                 * the link or sent a quotation, how they heard is history.
+                 */
+                const awaiting =
+                  inv.status === "invited" &&
+                  (inv.emailed_at
+                    ? null
+                    : to
+                      ? "not emailed yet"
+                      : "no email address");
                 return (
                   <div
                     key={inv.id}
@@ -588,9 +645,20 @@ export function ProcurementPanel({
                       <p className="text-sm font-medium text-ink">
                         {displayName}
                       </p>
-                      <Badge tone={INVITE_STATUS_TONE[inv.status]}>
-                        {inv.status}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {awaiting && <Badge tone="attention">{awaiting}</Badge>}
+                        {inv.status === "invited" && inv.emailed_at && (
+                          <span
+                            className="text-xs text-ink-faint"
+                            title={`Emailed to ${to} on ${formatDate(inv.emailed_at)}`}
+                          >
+                            emailed {formatDate(inv.emailed_at)}
+                          </span>
+                        )}
+                        <Badge tone={INVITE_STATUS_TONE[inv.status]}>
+                          {inv.status}
+                        </Badge>
+                      </div>
                     </div>
                     {canShare && (
                       <div className="flex flex-wrap items-center gap-2">
@@ -610,30 +678,23 @@ export function ProcurementPanel({
                             nothing, and concluded emailing suppliers did not
                             work at all rather than that this one supplier has
                             no address on file. */}
-                        {(() => {
-                          const to =
-                            inv.invite_email ||
-                            suppliers.find((s) => s.id === inv.supplier_id)
-                              ?.email ||
-                            null;
-                          return (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              busy={sharePending}
-                              disabled={!to}
-                              title={
-                                to
-                                  ? `Send the link to ${to}`
-                                  : "No email address on file for this supplier — add one under Suppliers, or copy the link instead."
-                              }
-                              onClick={() => emailInviteLink(inv.id)}
-                            >
-                              <Mail className="h-3.5 w-3.5" />
-                              Email
-                            </Button>
-                          );
-                        })()}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          busy={sharePending}
+                          disabled={!to}
+                          title={
+                            to
+                              ? inv.emailed_at
+                                ? `Send the link to ${to} again`
+                                : `Send the link to ${to}`
+                              : "No email address on file for this supplier — add one under Settings > Suppliers, or copy the link instead."
+                          }
+                          onClick={() => emailInviteLink(inv.id)}
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                          {inv.emailed_at ? "Email again" : "Email"}
+                        </Button>
                         {inv.invite_phone && (
                           <a
                             href={whatsappHref(

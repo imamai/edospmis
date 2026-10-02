@@ -10,8 +10,13 @@ import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/stage-labels";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { Supplier } from "@/lib/database.types";
+import { EditSupplierButton } from "../edit-supplier-button";
 
-export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SupplierDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const session = await requireSession();
   if (!can(session, "procurement.supplier.manage")) {
@@ -42,7 +47,10 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <Link href="/app/settings/suppliers" className="flex w-fit items-center gap-1 text-sm font-semibold text-ink-soft hover:text-brand">
+        <Link
+          href="/app/settings/suppliers"
+          className="flex w-fit items-center gap-1 text-sm font-semibold text-ink-soft hover:text-brand"
+        >
           <ArrowLeft className="h-3.5 w-3.5" />
           Suppliers
         </Link>
@@ -53,7 +61,15 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
               {s.email ?? "No email on file"} {s.phone && `· ${s.phone}`}
             </p>
           </div>
-          <Badge tone={s.is_active ? "good" : "neutral"}>{s.is_active ? "active" : "archived"}</Badge>
+          {/* Editable from here as well as from the list. This is where
+              somebody lands after clicking the name, and "No email on file"
+              is read far more often here than in a table row. */}
+          <div className="flex items-center gap-3">
+            <EditSupplierButton supplier={s} />
+            <Badge tone={s.is_active ? "good" : "neutral"}>
+              {s.is_active ? "active" : "archived"}
+            </Badge>
+          </div>
         </div>
       </div>
 
@@ -61,13 +77,17 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
         <Card>
           <CardBody>
             <p className="text-xs text-ink-faint">Purchase orders</p>
-            <p className="mt-0.5 text-lg font-semibold tnum text-ink">{pos.length}</p>
+            <p className="mt-0.5 text-lg font-semibold tnum text-ink">
+              {pos.length}
+            </p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <p className="text-xs text-ink-faint">Total value</p>
-            <p className="mt-0.5 text-lg font-semibold tnum text-ink">{formatMoney(totalValue)}</p>
+            <p className="mt-0.5 text-lg font-semibold tnum text-ink">
+              {formatMoney(totalValue)}
+            </p>
           </CardBody>
         </Card>
       </div>
@@ -76,7 +96,9 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
         <CardHeader title="Purchase orders allocated to this supplier" />
         <CardBody className="overflow-x-auto">
           {pos.length === 0 ? (
-            <p className="text-sm text-ink-faint">No purchase orders have gone to this supplier yet.</p>
+            <p className="text-sm text-ink-faint">
+              No purchase orders have gone to this supplier yet.
+            </p>
           ) : (
             <table className="w-full text-left text-sm">
               <thead>
@@ -91,18 +113,32 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
               </thead>
               <tbody>
                 {pos.map((p) => (
-                  <tr key={p.po_id} className="border-b border-line last:border-0">
-                    <td className="py-2 pr-4 font-mono text-xs text-ink">{p.po_number}</td>
+                  <tr
+                    key={p.po_id}
+                    className="border-b border-line last:border-0"
+                  >
+                    <td className="py-2 pr-4 font-mono text-xs text-ink">
+                      {p.po_number}
+                    </td>
                     <td className="py-2 pr-4 tnum">
-                      <Link href={`/app/cases/${p.case_id}`} className="font-medium text-brand hover:underline">
+                      <Link
+                        href={`/app/cases/${p.case_id}`}
+                        className="font-medium text-brand hover:underline"
+                      >
                         {p.case_number}
                       </Link>
                     </td>
                     <td className="py-2 pr-4">
-                      <Badge tone={PO_STATUS_TONE[p.status] ?? "neutral"}>{PO_STATUS_LABEL[p.status] ?? p.status}</Badge>
+                      <Badge tone={PO_STATUS_TONE[p.status] ?? "neutral"}>
+                        {PO_STATUS_LABEL[p.status] ?? p.status}
+                      </Badge>
                     </td>
-                    <td className="py-2 pr-4 text-right tnum text-ink-soft">{formatMoney(p.total_cents, { currency: p.currency })}</td>
-                    <td className="py-2 pr-4 text-ink-soft">{formatDate(p.issued_at)}</td>
+                    <td className="py-2 pr-4 text-right tnum text-ink-soft">
+                      {formatMoney(p.total_cents, { currency: p.currency })}
+                    </td>
+                    <td className="py-2 pr-4 text-ink-soft">
+                      {formatDate(p.issued_at)}
+                    </td>
                     <td className="py-2 text-right">
                       <PdfLinkButton
                         href={`/api/export/po/${p.po_id}`}

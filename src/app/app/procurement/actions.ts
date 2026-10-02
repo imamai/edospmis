@@ -40,11 +40,15 @@ export async function inviteSupplierToRfq(
   const session = await requireSession();
   if (!supplierId) return { error: "Choose a supplier.", ok: null };
   const supabase = await createClient();
-  const { error } = await supabase.from("edospmis_rfq_suppliers").insert({
-    tenant_id: session.tenant.id,
-    rfq_id: rfqId,
-    supplier_id: supplierId,
-  });
+  const { data: row, error } = await supabase
+    .from("edospmis_rfq_suppliers")
+    .insert({
+      tenant_id: session.tenant.id,
+      rfq_id: rfqId,
+      supplier_id: supplierId,
+    })
+    .select("id")
+    .single();
   if (error)
     return {
       error:
@@ -53,8 +57,23 @@ export async function inviteSupplierToRfq(
           : "Couldn't invite that supplier.",
       ok: null,
     };
+
+  // Inviting is telling them. A failed send is reported as part of the
+  // success, not instead of it: the invitation exists either way, and saying
+  // "couldn't invite" about a supplier who is now on the list would send
+  // somebody looking for a row that is already there.
+  const mail = await mailRfqInvite(
+    row.id,
+    session.tenant.id,
+    session.tenant.name,
+  );
   revalidatePath(`/app/cases/${caseId}`);
-  return { error: null, ok: "Supplier invited." };
+  return {
+    error: null,
+    ok: mail.ok
+      ? `Supplier invited. ${mail.message}`
+      : `Supplier invited, but not emailed: ${mail.message}`,
+  };
 }
 
 /** Sources a supplier who isn't in the system yet — same invite mechanism, no supplier_id required until they submit. */
@@ -69,16 +88,31 @@ export async function inviteProspectToRfq(
   if (!name.trim())
     return { error: "Enter a company or contact name.", ok: null };
   const supabase = await createClient();
-  const { error } = await supabase.from("edospmis_rfq_suppliers").insert({
-    tenant_id: session.tenant.id,
-    rfq_id: rfqId,
-    invite_name: name.trim(),
-    invite_email: email.trim() || null,
-    invite_phone: phone.trim() || null,
-  });
+  const { data: row, error } = await supabase
+    .from("edospmis_rfq_suppliers")
+    .insert({
+      tenant_id: session.tenant.id,
+      rfq_id: rfqId,
+      invite_name: name.trim(),
+      invite_email: email.trim() || null,
+      invite_phone: phone.trim() || null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: "Couldn't add that supplier.", ok: null };
+
+  const mail = await mailRfqInvite(
+    row.id,
+    session.tenant.id,
+    session.tenant.name,
+  );
   revalidatePath(`/app/cases/${caseId}`);
-  return { error: null, ok: "Supplier invited." };
+  return {
+    error: null,
+    ok: mail.ok
+      ? `Supplier invited. ${mail.message}`
+      : `Supplier invited, but not emailed: ${mail.message}`,
+  };
 }
 
 /**
@@ -99,11 +133,28 @@ async function requestOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-export async function shareRfqInviteLink(
-  caseId: string,
+/**
+ * Sends one supplier their invitation, and records that we did.
+ *
+ * WHY THIS IS A HELPER AND NOT A BUTTON. Inviting a supplier used to insert a
+ * row and send nothing: the mail went only if somebody separately clicked
+ * Email on that row. Both states rendered as the same "invited" badge, so a
+ * supplier nobody had written to looked exactly like one who had read it, and
+ * the buying team waited for quotations from people who had never been asked.
+ * Of every invitation in the live send log, two had mail sent.
+ *
+ * So inviting sends, and the manual button re-sends through this same path —
+ * one body of code, so a re-send cannot drift from the original.
+ *
+ * `emailed_at` is stamped only after the provider accepts. Acceptance is not
+ * delivery (one of those two sends bounced off a mistyped address), but it is
+ * the honest boundary of what this process can observe.
+ */
+async function mailRfqInvite(
   inviteId: string,
-): Promise<ProcurementState> {
-  const session = await requireSession();
+  tenantId: string,
+  tenantName: string,
+): Promise<{ ok: boolean; message: string }> {
   const supabase = await createClient();
   const { data: invite } = await supabase
     .from("edospmis_rfq_suppliers")
@@ -112,7 +163,7 @@ export async function shareRfqInviteLink(
     )
     .eq("id", inviteId)
     .maybeSingle();
-  if (!invite) return { error: "Couldn't find that invitation.", ok: null };
+  if (!invite) return { ok: false, message: "Couldn't find that invitation." };
 
   const rfq = invite.edospmis_rfqs as unknown as {
     title: string;
@@ -124,7 +175,10 @@ export async function shareRfqInviteLink(
   } | null;
   const email = invite.invite_email || supplier?.email;
   if (!email)
-    return { error: "This supplier has no email address on file.", ok: null };
+    return {
+      ok: false,
+      message: "This supplier has no email address on file.",
+    };
 
   const base = await requestOrigin();
   const link = `${base}/quote/${invite.access_token}`;
@@ -137,7 +191,7 @@ export async function shareRfqInviteLink(
     .select(
       "is_mandatory, edospmis_supplier_doc_types(name), edospmis_procurement_templates(name)",
     )
-    .eq("tenant_id", session.tenant.id)
+    .eq("tenant_id", tenantId)
     .eq("rfq_id", invite.rfq_id);
 
   const one = <T>(v: T | T[] | null | undefined): T | null =>
@@ -172,17 +226,53 @@ export async function shareRfqInviteLink(
     to: email,
     ...rfqInviteEmail({
       link,
-      tenantName: session.tenant.name,
+      tenantName,
       rfqTitle: rfq?.title ?? "a request",
       closingDate: rfq?.closing_date ? formatDate(rfq.closing_date) : null,
       requirements,
     }),
   });
   if (!result.ok)
-    return { error: result.error ?? "Couldn't send the email.", ok: null };
+    return { ok: false, message: result.error ?? "Couldn't send the email." };
 
+  await supabase
+    .from("edospmis_rfq_suppliers")
+    .update({ emailed_at: new Date().toISOString() })
+    .eq("id", inviteId)
+    .eq("tenant_id", tenantId);
+
+  return { ok: true, message: `Emailed to ${email}.` };
+}
+
+export async function shareRfqInviteLink(
+  caseId: string,
+  inviteId: string,
+): Promise<ProcurementState> {
+  const session = await requireSession();
+  const result = await mailRfqInvite(
+    inviteId,
+    session.tenant.id,
+    session.tenant.name,
+  );
   revalidatePath(`/app/cases/${caseId}`);
-  return { error: null, ok: `Emailed to ${email}.` };
+  return result.ok
+    ? { error: null, ok: result.message }
+    : { error: result.message, ok: null };
+}
+
+/**
+ * The base URL for a quote link, for the client to build Copy-link and
+ * WhatsApp hrefs with.
+ *
+ * Those two built the URL from NEXT_PUBLIC_SITE_URL in the browser, while the
+ * emailed link had already learned not to trust it — see `requestOrigin`,
+ * which exists because that variable once put "undefined/quote/..." in a real
+ * supplier's inbox. Sharing the same origin means all three routes to a
+ * supplier are right or wrong together, rather than one silently working.
+ */
+export async function quoteLinkOrigin(): Promise<string> {
+  await requireSession();
+  return requestOrigin();
 }
 
 export async function recordQuotation(

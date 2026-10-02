@@ -425,6 +425,8 @@ export interface RfqInvite {
   viewed_at: string | null;
   responded_at: string | null;
   invited_at: string;
+  /** When the invitation email was last accepted by the provider. Null means no send recorded. */
+  emailed_at: string | null;
 }
 
 export interface Evaluation {
