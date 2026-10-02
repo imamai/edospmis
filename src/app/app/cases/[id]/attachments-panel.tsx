@@ -2,9 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Paperclip, Trash2, Upload } from "lucide-react";
+import { Eye, Paperclip, Trash2, Upload } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DocumentViewer,
+  type ViewerTarget,
+} from "@/components/ui/document-viewer";
 import { SelectInput, TextInput } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -139,14 +143,18 @@ export function AttachmentsPanel({
     });
   }
 
-  function open(id: string) {
+  // Opens over the case, not in a new tab: an approver checking a quote
+  // against the request should not lose the request to look at it.
+  const [viewing, setViewing] = useState<ViewerTarget | null>(null);
+
+  function open(id: string, filename: string) {
     start(async () => {
       const url = await getAttachmentUrl(id);
       if (!url) {
         setError("That file could not be opened. It may have been removed.");
         return;
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      setViewing({ url, filename });
     });
   }
 
@@ -196,11 +204,11 @@ export function AttachmentsPanel({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => open(file.id)}
+                    onClick={() => open(file.id, file.filename)}
                     disabled={pending}
                     className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand disabled:opacity-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
+                    <Eye className="h-3.5 w-3.5" />
                     Open
                   </button>
                   {canEdit && (
@@ -283,6 +291,7 @@ export function AttachmentsPanel({
             {error}
           </p>
         )}
+        <DocumentViewer target={viewing} onClose={() => setViewing(null)} />
       </CardBody>
     </Card>
   );

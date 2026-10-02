@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, CircleAlert, Download, ShieldCheck } from "lucide-react";
+import { ChevronDown, CircleAlert, Eye, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  DocumentViewer,
+  type ViewerTarget,
+} from "@/components/ui/document-viewer";
 import { Button } from "@/components/ui/button";
 import { openBidDocument } from "@/app/app/procurement/requirement-actions";
 import { formatDate, formatMoney } from "@/lib/utils";
@@ -53,6 +57,9 @@ export function ResponsesTable({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Opens over the case rather than in a new tab. Comparing two bidders'
+  // tax certificates used to mean two tabs and finding your way back.
+  const [viewing, setViewing] = useState<ViewerTarget | null>(null);
 
   if (rows.length === 0) return null;
 
@@ -61,7 +68,7 @@ export function ResponsesTable({
     quoted.length > 1 ? Math.min(...quoted.map((r) => r.totalCents!)) : null;
   const responded = quoted.length;
 
-  function openDoc(id: string) {
+  function openDoc(id: string, filename: string, label?: string) {
     setError(null);
     start(async () => {
       const url = await openBidDocument(id);
@@ -69,7 +76,7 @@ export function ResponsesTable({
         setError("That file could not be opened. It may have been removed.");
         return;
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      setViewing({ url, filename, label });
     });
   }
 
@@ -208,11 +215,17 @@ export function ResponsesTable({
                             </span>
                             <button
                               type="button"
-                              onClick={() => openDoc(doc.id)}
+                              onClick={() =>
+                                openDoc(
+                                  doc.id,
+                                  doc.filename,
+                                  doc.requirement ?? undefined,
+                                )
+                              }
                               disabled={pending}
                               className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-brand hover:underline disabled:opacity-50"
                             >
-                              <Download className="h-3 w-3" />
+                              <Eye className="h-3 w-3" />
                               Open
                             </button>
                           </li>
@@ -276,6 +289,7 @@ export function ResponsesTable({
           {error}
         </p>
       )}
+      <DocumentViewer target={viewing} onClose={() => setViewing(null)} />
     </div>
   );
 }

@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DocumentViewer,
+  type ViewerTarget,
+} from "@/components/ui/document-viewer";
 import { TextArea, TextInput } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -180,14 +184,16 @@ export function TemplatesSection({
     });
   }
 
-  function openFile(id: string) {
+  const [viewing, setViewing] = useState<ViewerTarget | null>(null);
+
+  function openFile(id: string, filename: string, label: string) {
     start(async () => {
       const url = await templateFileUrl(id);
       if (!url) {
         setNotice({ tone: "error", text: "That file could not be opened." });
         return;
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      setViewing({ url, filename, label });
     });
   }
 
@@ -236,7 +242,13 @@ export function TemplatesSection({
               {template.kind === "document" && template.tenant_id !== null && (
                 <button
                   type="button"
-                  onClick={() => openFile(template.id)}
+                  onClick={() =>
+                    openFile(
+                      template.id,
+                      template.filename ?? template.name,
+                      template.name,
+                    )
+                  }
                   disabled={pending}
                   className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-soft hover:border-brand hover:text-brand disabled:opacity-50"
                 >
@@ -473,6 +485,7 @@ export function TemplatesSection({
           {notice.text}
         </p>
       )}
+      <DocumentViewer target={viewing} onClose={() => setViewing(null)} />
     </div>
   );
 }
