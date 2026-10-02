@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -17,20 +17,13 @@ import {
   shareRfqInviteLink,
   mailUnsentRfqInvites,
   quoteLinkOrigin,
-  recordQuotation,
   awardPO,
   approvePO,
-  type ProcurementState,
 } from "../../procurement/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  NumberInput,
-  SelectInput,
-  TextArea,
-  TextInput,
-} from "@/components/ui/field";
+import { TextArea, TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
 import { PdfLinkButton } from "@/components/ui/pdf-link-button";
 import { formatDate, formatMoney } from "@/lib/utils";
@@ -38,6 +31,10 @@ import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
 import { ResponsesTable, type ResponseRow } from "./responses-table";
+import {
+  RecordQuotationsForm,
+  type QuoteCandidate,
+} from "./record-quotations-form";
 import { PanelSteps, NextHere, activeBox } from "./panel-steps";
 import type { BidReview } from "@/lib/data/tender";
 import type {
@@ -45,8 +42,6 @@ import type {
   RfqRequirement,
   SupplierDocType,
 } from "@/lib/tender-types";
-
-const initialQuotation: ProcurementState = { error: null, ok: null };
 
 /** The five jobs that make up the procurement stage, in the order they happen. */
 type ProcurementStep =
@@ -303,10 +298,32 @@ export function ProcurementPanel({
     origin ?? (typeof window === "undefined" ? "" : window.location.origin);
 
   const [recordingQuote, setRecordingQuote] = useState(false);
-  const [quoteState, quoteAction, quotePending] = useActionState(
-    recordQuotation,
-    initialQuotation,
-  );
+  const [quoteMsg, setQuoteMsg] = useState<string | null>(null);
+
+  /**
+   * Everyone invited, with what they have quoted so far.
+   *
+   * Suppliers who have already quoted are included rather than filtered out:
+   * at the moment you are recording what came back, seeing who is still
+   * missing is the useful thing, and a list that silently drops the ones you
+   * have done leaves you counting.
+   */
+  const quoteCandidates: QuoteCandidate[] = invites
+    .filter((inv) => inv.supplier_id)
+    .map((inv) => {
+      const existing = quotations.find(
+        (q) => q.supplier_id === inv.supplier_id,
+      );
+      return {
+        supplierId: inv.supplier_id!,
+        name:
+          inv.invite_name ??
+          suppliers.find((s) => s.id === inv.supplier_id)?.name ??
+          "Supplier",
+        quotedCents: existing?.total_cents ?? null,
+        currency: existing?.currency ?? "KES",
+      };
+    });
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [awardingId, setAwardingId] = useState<string | null>(null);
   const [awardNotes, setAwardNotes] = useState("");
@@ -325,14 +342,6 @@ export function ProcurementPanel({
   const [overrideReason, setOverrideReason] = useState("");
   const [approvePending, startApprovePO] = useTransition();
   const [approveError, setApproveError] = useState<string | null>(null);
-
-  // A recorded quotation closes the dialog — derived, not stored, so the
-  // success does not need a second render to take effect.
-  const quoteDialogOpen = recordingQuote && !quoteState.ok;
-
-  useEffect(() => {
-    if (quoteState.ok) router.refresh();
-  }, [quoteState.ok, router]);
 
   function invite(supplierId: string) {
     startInvite(async () => {
@@ -800,51 +809,39 @@ export function ProcurementPanel({
         )}
 
         {canInvite && invitedSupplierIds.length > 0 && (
-          <div>
+          <div className="flex flex-col gap-1.5">
             <Button
               size="sm"
               variant="secondary"
               onClick={() => setRecordingQuote(true)}
             >
-              Record a quotation
+              Record quotations
             </Button>
-            <Modal
-              open={quoteDialogOpen}
-              onClose={() => setRecordingQuote(false)}
-              title="Record a quotation"
-              dismissible={!quotePending}
-              size="sm"
-            >
-              <form action={quoteAction} className="flex flex-col gap-3">
-                <input type="hidden" name="rfq_id" value={rfq.id} />
-                <input type="hidden" name="case_id" value={rfq.case_id} />
-                <SelectInput label="Supplier" name="supplier_id" required>
-                  <option value="">Choose</option>
-                  {suppliers
-                    .filter((s) => invitedSet.has(s.id))
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                </SelectInput>
-                <NumberInput
-                  label="Total quoted"
-                  name="total"
-                  unit="KES"
-                  decimals
-                  required
-                />
-                {quoteState.error && (
-                  <p className="text-xs text-critical">{quoteState.error}</p>
-                )}
-                <ModalFormActions
+            {quoteMsg && <p className="text-xs text-ink-faint">{quoteMsg}</p>}
+            {/* Mounted only while open, so each sitting starts empty rather
+                than holding whatever was typed and abandoned last time. */}
+            {recordingQuote && (
+              <Modal
+                open
+                onClose={() => setRecordingQuote(false)}
+                title="Record quotations"
+                description="Everything that came back, in one go."
+                size="xl"
+              >
+                <RecordQuotationsForm
+                  rfqId={rfq.id}
+                  caseId={rfq.case_id}
+                  candidates={quoteCandidates}
+                  items={rfq.items ?? []}
                   onCancel={() => setRecordingQuote(false)}
-                  submitLabel="Record"
-                  busy={quotePending}
+                  onDone={(message) => {
+                    setRecordingQuote(false);
+                    setQuoteMsg(message);
+                    router.refresh();
+                  }}
                 />
-              </form>
-            </Modal>
+              </Modal>
+            )}
           </div>
         )}
 

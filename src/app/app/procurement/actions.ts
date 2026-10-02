@@ -417,38 +417,93 @@ export async function quoteLinkOrigin(): Promise<string> {
   return requestOrigin();
 }
 
-export async function recordQuotation(
-  _prev: ProcurementState,
-  form: FormData,
+/**
+ * Several quotations at once, with their line detail.
+ *
+ * Replaces entering them one modal at a time. Quotations do not arrive one at
+ * a time — a buyer opens their email on the closing date and has four of them
+ * — and a form that takes one supplier per round made recording them a chore
+ * that got done late or not at all.
+ *
+ * LINE PRICES, NOT JUST A TOTAL. A staff-recorded quotation could only ever
+ * carry a total, so "View" on one said "No line-item breakdown on file" and
+ * there was nothing to look at. Comparing two bids by their totals alone
+ * hides the thing that usually decides it: one of them priced the wrong
+ * quantity. Lines are optional — a supplier who sent a single figure is still
+ * recorded as a single figure — but now possible.
+ *
+ * ONE INSERT. Every row goes in a single statement, so a failure on the
+ * fourth supplier does not leave three recorded and the buyer unsure which.
+ */
+export interface QuotationEntry {
+  supplierId: string;
+  totalCents: number;
+  notes: string | null;
+  /** Null when only a total was given. */
+  linePrices:
+    | {
+        description: string;
+        qty: number;
+        unit: string;
+        unit_price_cents: number;
+      }[]
+    | null;
+}
+
+export async function recordQuotations(
+  rfqId: string,
+  caseId: string,
+  entries: QuotationEntry[],
 ): Promise<ProcurementState> {
   const session = await requireSession();
-  const rfqId = String(form.get("rfq_id") ?? "");
-  const caseId = String(form.get("case_id") ?? "");
-  const supplierId = String(form.get("supplier_id") ?? "");
-  const totalRaw = String(form.get("total") ?? "");
-  const notes = String(form.get("notes") ?? "").trim() || null;
-  if (!supplierId) return { error: "Choose a supplier.", ok: null };
-  const totalCents = Math.round(Number(totalRaw) * 100);
-  if (!Number.isFinite(totalCents) || totalCents <= 0)
-    return { error: "Enter the quoted amount.", ok: null };
+  const usable = entries.filter(
+    (e) => e.supplierId && Number.isFinite(e.totalCents) && e.totalCents > 0,
+  );
+  if (usable.length === 0)
+    return { error: "Enter an amount for at least one supplier.", ok: null };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("edospmis_quotations").insert({
-    tenant_id: session.tenant.id,
-    rfq_id: rfqId,
-    supplier_id: supplierId,
-    total_cents: totalCents,
-    notes,
-  });
-  if (error) return { error: "Couldn't save that quotation.", ok: null };
 
+  // A supplier who already has a quotation is skipped rather than refused:
+  // the buyer may be recording the three that are new and should not have to
+  // clear the form to do it.
+  const { data: already } = await supabase
+    .from("edospmis_quotations")
+    .select("supplier_id")
+    .eq("rfq_id", rfqId)
+    .eq("tenant_id", session.tenant.id);
+  const have = new Set((already ?? []).map((q) => q.supplier_id));
+  const fresh = usable.filter((e) => !have.has(e.supplierId));
+  if (fresh.length === 0)
+    return {
+      error: "Those suppliers already have a quotation on this request.",
+      ok: null,
+    };
+
+  const { error } = await supabase.from("edospmis_quotations").insert(
+    fresh.map((e) => ({
+      tenant_id: session.tenant.id,
+      rfq_id: rfqId,
+      supplier_id: e.supplierId,
+      total_cents: e.totalCents,
+      notes: e.notes,
+      line_prices: e.linePrices,
+    })),
+  );
+  if (error) return { error: "Couldn't save those quotations.", ok: null };
+
+  // One notification for one sitting, not one per supplier — the buyer is
+  // being told there is a comparison to make, and they only need telling once.
   const ctx = await caseContext(caseId);
   if (ctx) {
     await notifyRole({
       tenantId: ctx.tenantId,
       caseId,
       kind: "quotation.received",
-      title: `${ctx.caseNumber}: a quotation is in — compare and award`,
+      title:
+        fresh.length === 1
+          ? `${ctx.caseNumber}: a quotation is in — compare and award`
+          : `${ctx.caseNumber}: ${fresh.length} quotations are in — compare and award`,
       body: ctx.title ?? undefined,
       href: `/app/cases/${caseId}`,
       permission: "procurement.rfq.evaluate",
@@ -456,17 +511,17 @@ export async function recordQuotation(
   }
 
   revalidatePath(`/app/cases/${caseId}`);
-  return { error: null, ok: "Quotation recorded." };
+  const skipped = usable.length - fresh.length;
+  return {
+    error: null,
+    ok:
+      `Recorded ${fresh.length} quotation${fresh.length === 1 ? "" : "s"}.` +
+      (skipped > 0
+        ? ` ${skipped} already had one and ${skipped === 1 ? "was" : "were"} left alone.`
+        : ""),
+  };
 }
 
-/**
- * Issue the purchase order.
- *
- * `overrideReason` is only ever read when the winning bidder has not returned
- * something mandatory. The gate itself lives in edospmis_award_po, not here,
- * so passing a reason when nothing is missing changes nothing and cannot be
- * used to pre-arm an override.
- */
 export async function awardPO(
   rfqId: string,
   caseId: string,
