@@ -456,183 +456,197 @@ export function FinancePanel({
           </p>
         )}
 
+        {/* The button is offered only while there is headroom to bill
+            against. The dialog below is not: it is also how an invoice is
+            corrected, and a fully billed order is exactly when a correction
+            is wanted. Keeping them together left Correct setting state for a
+            dialog that was not rendered — a button that did nothing at all. */}
         {canSubmit && canBillMore && (
-          <>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setSubmitting(true)}
-            >
-              {invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
-            </Button>
-            <Modal
-              open={submitting || editing !== null}
-              onClose={closeInvoiceModal}
-              title={
-                editing
-                  ? `Correct invoice ${editing.invoice_number}`
-                  : invoices.length === 0
-                    ? "Submit invoice"
-                    : "Add another invoice"
-              }
-              dismissible={!submitPending}
-              size="lg"
-            >
-              <form
-                ref={invoiceFormRef}
-                onSubmit={editing ? editForm : submitForm}
-                onInput={recalcTax}
-                className="flex flex-col gap-3"
-              >
-                <input type="hidden" name="case_id" value={caseId} />
-                {editing && (
-                  <input type="hidden" name="invoice_id" value={editing.id} />
-                )}
-                <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
-                  These lines are prefilled from{" "}
-                  <span className="font-semibold text-ink">
-                    {matchBasis.poNumber}
-                  </span>
-                  . Each line is checked against that order&rsquo;s unit price,
-                  and the running total against what has already been billed and
-                  received — anything that doesn&rsquo;t line up is raised as a
-                  match exception rather than silently accepted.
-                  {invoices.length > 0 && (
-                    <>
-                      {" "}
-                      <span className="font-semibold text-ink">
-                        {formatMoney(remainingNet, { currency })}
-                      </span>{" "}
-                      of this order is still unbilled; edit the quantities to
-                      bill only this delivery.
-                    </>
-                  )}
-                </p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <TextInput
-                    label="Supplier invoice #"
-                    name="invoice_number"
-                    required
-                  />
-                  <TextInput
-                    label="Payment terms"
-                    name="payment_terms"
-                    placeholder="e.g. Net 30"
-                    hint="Sets the due date"
-                  />
-                  <TextInput
-                    label="Due date"
-                    name="due_date"
-                    type="date"
-                    hint="Optional — otherwise from the terms"
-                  />
-                </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setSubmitting(true)}
+          >
+            {invoices.length === 0 ? "Submit invoice" : "Add another invoice"}
+          </Button>
+        )}
 
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-ink">Line items</p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setRows((r) => [
-                        ...r,
-                        {
-                          id: nextId++,
-                          description: "",
-                          unit: "",
-                          qty: 1,
-                          unitCost: 0,
-                        },
-                      ])
-                    }
-                    className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add item
-                  </button>
-                </div>
-                {rows.map((row, i) => (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-12 items-end gap-2"
-                  >
-                    <div className="col-span-12 sm:col-span-5">
-                      <TextInput
-                        label={i === 0 ? "Item" : ""}
-                        name="item_description"
-                        defaultValue={row.description}
-                      />
-                    </div>
-                    <div className="col-span-3 sm:col-span-2">
-                      <TextInput
-                        label={i === 0 ? "Unit" : ""}
-                        name="item_unit"
-                        defaultValue={row.unit}
-                      />
-                    </div>
-                    <div className="col-span-3 sm:col-span-2">
-                      <NumberInput
-                        label={i === 0 ? "Qty" : ""}
-                        name="item_qty"
-                        min={0}
-                        decimals
-                        defaultValue={row.qty}
-                      />
-                    </div>
-                    <div className="col-span-4 sm:col-span-2">
-                      <NumberInput
-                        label={i === 0 ? "Unit cost" : ""}
-                        name="item_unit_cost"
-                        min={0}
-                        decimals
-                        defaultValue={row.unitCost}
-                      />
-                    </div>
-                    {rows.length > 1 && (
-                      <div className="col-span-2 flex justify-end sm:col-span-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRows((r) => r.filter((x) => x.id !== row.id))
-                          }
-                          aria-label="Remove item"
-                          className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <NumberInput
-                  label={vatEnabled ? `VAT (${vatRate}%)` : "Tax"}
-                  name="tax"
-                  min={0}
-                  decimals
-                  value={tax}
-                  onChange={(e) => {
-                    setTax(e.target.value);
-                    setTaxEdited(true);
-                  }}
-                  unit={currency}
-                  hint={
-                    vatEnabled
-                      ? taxEdited
-                        ? "You have set this by hand — it will no longer follow the lines."
-                        : `Worked out at ${vatRate}% of the lines above. Type over it if the supplier charged something else.`
-                      : "VAT is switched off for this organisation. Enter any tax by hand."
-                  }
-                />
-                {submitState.error && (
-                  <p className="text-xs text-critical">{submitState.error}</p>
+        {canSubmit && (
+          <Modal
+            open={submitting || editing !== null}
+            onClose={closeInvoiceModal}
+            title={
+              editing
+                ? `Correct invoice ${editing.invoice_number}`
+                : invoices.length === 0
+                  ? "Submit invoice"
+                  : "Add another invoice"
+            }
+            dismissible={!submitPending}
+            size="lg"
+          >
+            <form
+              ref={invoiceFormRef}
+              onSubmit={editing ? editForm : submitForm}
+              onInput={recalcTax}
+              className="flex flex-col gap-3"
+            >
+              <input type="hidden" name="case_id" value={caseId} />
+              {editing && (
+                <input type="hidden" name="invoice_id" value={editing.id} />
+              )}
+              <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs text-ink-soft">
+                {/* A correction starts from the supplier's document, not from
+                    the order — saying "prefilled from the PO" over figures
+                    that plainly are not makes the reader doubt the screen. */}
+                {editing
+                  ? "These lines are what this invoice currently says. "
+                  : "These lines are prefilled from "}
+                {!editing && (
+                  <>
+                    <span className="font-semibold text-ink">
+                      {matchBasis.poNumber}
+                    </span>
+                    .{" "}
+                  </>
                 )}
-                <ModalFormActions
-                  onCancel={() => setSubmitting(false)}
-                  submitLabel="Submit invoice"
-                  busy={submitPending}
+                Each line is checked against{" "}
+                {editing ? "the order" : "that order"}&rsquo;s unit price, and
+                the running total against what has already been billed and
+                received — anything that doesn&rsquo;t line up is raised as a
+                match exception rather than silently accepted.
+                {invoices.length > 0 && (
+                  <>
+                    {" "}
+                    <span className="font-semibold text-ink">
+                      {formatMoney(remainingNet, { currency })}
+                    </span>{" "}
+                    of this order is still unbilled; edit the quantities to bill
+                    only this delivery.
+                  </>
+                )}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <TextInput
+                  label="Supplier invoice #"
+                  name="invoice_number"
+                  required
                 />
-              </form>
-            </Modal>
-          </>
+                <TextInput
+                  label="Payment terms"
+                  name="payment_terms"
+                  placeholder="e.g. Net 30"
+                  hint="Sets the due date"
+                />
+                <TextInput
+                  label="Due date"
+                  name="due_date"
+                  type="date"
+                  hint="Optional — otherwise from the terms"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-ink">Line items</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRows((r) => [
+                      ...r,
+                      {
+                        id: nextId++,
+                        description: "",
+                        unit: "",
+                        qty: 1,
+                        unitCost: 0,
+                      },
+                    ])
+                  }
+                  className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add item
+                </button>
+              </div>
+              {rows.map((row, i) => (
+                <div key={row.id} className="grid grid-cols-12 items-end gap-2">
+                  <div className="col-span-12 sm:col-span-5">
+                    <TextInput
+                      label={i === 0 ? "Item" : ""}
+                      name="item_description"
+                      defaultValue={row.description}
+                    />
+                  </div>
+                  <div className="col-span-3 sm:col-span-2">
+                    <TextInput
+                      label={i === 0 ? "Unit" : ""}
+                      name="item_unit"
+                      defaultValue={row.unit}
+                    />
+                  </div>
+                  <div className="col-span-3 sm:col-span-2">
+                    <NumberInput
+                      label={i === 0 ? "Qty" : ""}
+                      name="item_qty"
+                      min={0}
+                      decimals
+                      defaultValue={row.qty}
+                    />
+                  </div>
+                  <div className="col-span-4 sm:col-span-2">
+                    <NumberInput
+                      label={i === 0 ? "Unit cost" : ""}
+                      name="item_unit_cost"
+                      min={0}
+                      decimals
+                      defaultValue={row.unitCost}
+                    />
+                  </div>
+                  {rows.length > 1 && (
+                    <div className="col-span-2 flex justify-end sm:col-span-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRows((r) => r.filter((x) => x.id !== row.id))
+                        }
+                        aria-label="Remove item"
+                        className="rounded-md p-2 text-ink-faint hover:bg-surface-sunk hover:text-critical"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <NumberInput
+                label={vatEnabled ? `VAT (${vatRate}%)` : "Tax"}
+                name="tax"
+                min={0}
+                decimals
+                value={tax}
+                onChange={(e) => {
+                  setTax(e.target.value);
+                  setTaxEdited(true);
+                }}
+                unit={currency}
+                hint={
+                  vatEnabled
+                    ? taxEdited
+                      ? "You have set this by hand — it will no longer follow the lines."
+                      : `Worked out at ${vatRate}% of the lines above. Type over it if the supplier charged something else.`
+                    : "VAT is switched off for this organisation. Enter any tax by hand."
+                }
+              />
+              {submitState.error && (
+                <p className="text-xs text-critical">{submitState.error}</p>
+              )}
+              <ModalFormActions
+                onCancel={() => setSubmitting(false)}
+                submitLabel="Submit invoice"
+                busy={submitPending}
+              />
+            </form>
+          </Modal>
         )}
 
         {canSubmit &&
