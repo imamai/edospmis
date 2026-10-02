@@ -143,13 +143,17 @@ export default async function CaseDetailPage({
 
   const stageDurations = await getStageDurations(session.tenant.id, c.id);
   const currentStage = stageDurations[stageDurations.length - 1];
-  const currentStageDueAt = currentStage
-    ? await getCurrentStageDueAt(
-        session.tenant.id,
-        c.current_stage_key,
-        currentStage.entered_at,
-      )
-    : null;
+  // A finished case has no clock running. Its "current stage" is Closed or
+  // Rejected, which nothing ever leaves, so an SLA computed against it counts
+  // up for ever and eventually reports a breach on work that was delivered.
+  const currentStageDueAt =
+    currentStage && !TERMINAL_CASE_STATUSES.includes(c.status)
+      ? await getCurrentStageDueAt(
+          session.tenant.id,
+          c.current_stage_key,
+          currentStage.entered_at,
+        )
+      : null;
   const currentStageSla = currentStageDueAt
     ? slaStatus(currentStageDueAt)
     : null;

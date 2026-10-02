@@ -1,7 +1,7 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { StageDuration } from "@/lib/data/cases";
-import { STAGE_LABEL } from "@/lib/stage-labels";
+import { STAGE_LABEL, isTerminalStage } from "@/lib/stage-labels";
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -27,7 +27,14 @@ export function StageTimingCard({ durations }: { durations: StageDuration[] }) {
       />
       <CardBody className="flex flex-col divide-y divide-line">
         {durations.map((d, i) => {
-          const isCurrent = i === durations.length - 1 && !d.left_at;
+          // A terminal stage has no left_at because nothing ever leaves it,
+          // which is not the same as being in progress. Closed, Rejected and
+          // Cancelled were each labelled "in progress" for ever — on a case
+          // whose whole point is that it is finished.
+          const isCurrent =
+            i === durations.length - 1 &&
+            !d.left_at &&
+            !isTerminalStage(d.stage_key);
           return (
             <div
               key={`${d.stage_key}-${d.entered_at}`}
