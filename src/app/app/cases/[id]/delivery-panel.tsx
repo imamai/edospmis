@@ -11,6 +11,7 @@ import {
 } from "../../fulfilment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { PanelSteps } from "./panel-steps";
 import { Badge } from "@/components/ui/badge";
 import { SelectInput, TextArea, TextInput } from "@/components/ui/field";
 import { Modal, ModalFormActions } from "@/components/ui/modal";
@@ -101,6 +102,33 @@ export function DeliveryPanel({
         }
       />
       <CardBody className="flex flex-col gap-4">
+        <PanelSteps
+          steps={[
+            { key: "schedule", label: "Schedule" },
+            { key: "dispatch", label: "Dispatch" },
+            { key: "confirm", label: "Confirm" },
+          ]}
+          current={
+            !delivery
+              ? "schedule"
+              : delivery.status === "scheduled"
+                ? "dispatch"
+                : delivery.status === "dispatched"
+                  ? "confirm"
+                  : "confirm"
+          }
+          complete={delivery?.status === "confirmed"}
+          next={
+            !delivery
+              ? "Set a date and time for the delivery."
+              : delivery.status === "scheduled"
+                ? "Mark it dispatched once it leaves."
+                : delivery.status === "dispatched"
+                  ? "Confirm it arrived — that also closes the case."
+                  : "Delivered and confirmed. The case is closed."
+          }
+        />
+
         {delivery && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3">
             <div>

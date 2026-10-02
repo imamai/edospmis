@@ -35,8 +35,7 @@ import type { ProcurementDetail } from "@/lib/data/procurement";
 import type { RfqInviteStatus, Supplier } from "@/lib/database.types";
 import { RequirementsPicker } from "./requirements-picker";
 import { ResponsesTable, type ResponseRow } from "./responses-table";
-import { WorkflowStepper } from "@/components/app/workflow-stepper";
-import { MousePointerClick } from "lucide-react";
+import { PanelSteps, NextHere, activeBox } from "./panel-steps";
 import type { BidReview } from "@/lib/data/tender";
 import type {
   ProcurementTemplate,
@@ -149,18 +148,8 @@ export function ProcurementPanel({
    * brand colour the current chevron already uses, so the step in the stepper
    * and the block you act in are visibly the same thing.
    */
-  const active = (s: ProcurementStep) =>
-    step === s
-      ? "rounded-lg border border-brand/40 bg-brand/[0.04] p-3 -mx-1"
-      : "";
-
-  const marker = (s: ProcurementStep) =>
-    step === s ? (
-      <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[11px] font-semibold text-white">
-        <MousePointerClick className="h-3.5 w-3.5" aria-hidden="true" />
-        Do this next
-      </span>
-    ) : null;
+  const active = (s: ProcurementStep) => activeBox(step === s);
+  const marker = (s: ProcurementStep) => (step === s ? <NextHere /> : null);
 
   /**
    * One row per supplier who was asked, whether or not they answered.
@@ -451,15 +440,12 @@ export function ProcurementPanel({
             Reused rather than redrawn so the two read as the same idea at two
             scales, and so a change to how a step looks happens once. */}
         <div className="flex flex-col gap-2">
-          <WorkflowStepper
-            stages={PROCUREMENT_STEPS}
-            currentKey={step}
+          <PanelSteps
+            steps={PROCUREMENT_STEPS}
+            current={step}
             complete={step === "done"}
+            next={nextLine[step]}
           />
-          <p className="text-xs text-ink-soft">
-            <span className="font-semibold text-ink">Next: </span>
-            {nextLine[step]}
-          </p>
         </div>
 
         {/* Above the invitations on purpose: what a bidder must return is part

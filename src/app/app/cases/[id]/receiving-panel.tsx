@@ -10,6 +10,7 @@ import {
 } from "../../fulfilment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { PanelSteps } from "./panel-steps";
 import { Badge } from "@/components/ui/badge";
 import {
   NumberInput,
@@ -129,6 +130,24 @@ export function ReceivingPanel({
         }
       />
       <CardBody className="flex flex-col gap-5">
+        <PanelSteps
+          steps={[
+            { key: "receive", label: "Record receipt" },
+            { key: "inspect", label: "Inspect" },
+          ]}
+          current={detail.grns.length === 0 ? "receive" : "inspect"}
+          complete={
+            detail.grns.length > 0 && detail.grns.every((g) => g.inspection)
+          }
+          next={
+            detail.grns.length === 0
+              ? "Record what actually arrived, line by line."
+              : detail.grns.every((g) => g.inspection)
+                ? "Everything received has been inspected. Finance can bill it."
+                : "Inspect what arrived and record the result."
+          }
+        />
+
         {detail.grns.map((grn) => (
           <div key={grn.id} className="rounded-lg border border-line p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

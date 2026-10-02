@@ -16,6 +16,7 @@ import {
 } from "../../finance/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { PanelSteps } from "./panel-steps";
 import { Badge } from "@/components/ui/badge";
 import {
   NumberInput,
@@ -348,6 +349,39 @@ export function FinancePanel({
   const resolvingInvoice = invoices.find((i) =>
     i.exceptions.some((ex) => ex.id === resolvingId),
   );
+  /**
+   * Where this case has got to inside finance.
+   *
+   * Voided invoices are ignored throughout: they are kept for the record and
+   * are deliberately outside every total the match computes, so a case whose
+   * only invoice was voided is back to having no invoice at all.
+   */
+  const liveInvoices = invoices.filter((i) => i.status !== "void");
+  const openExceptions = liveInvoices.flatMap((i) =>
+    i.exceptions.filter((ex) => ex.status !== "resolved"),
+  );
+  const financeStep: "invoice" | "match" | "approve" | "pay" | "done" =
+    liveInvoices.length === 0
+      ? "invoice"
+      : openExceptions.length > 0
+        ? "match"
+        : liveInvoices.every((i) => i.status === "paid")
+          ? "done"
+          : liveInvoices.some((i) => i.status === "approved")
+            ? "pay"
+            : "approve";
+
+  const financeNext =
+    financeStep === "invoice"
+      ? "Enter the supplier's invoice against what was received."
+      : financeStep === "match"
+        ? "A line does not agree with the order or the receipt. Resolve it, or correct the invoice."
+        : financeStep === "approve"
+          ? "The invoice matches. Approve it for payment."
+          : financeStep === "pay"
+            ? "Approved — record the payment once it leaves."
+            : "Paid in full. Nothing further here.";
+
   const receiptRecorded = matchBasis.grnNumbers.length > 0;
   const canBillMore = receiptRecorded && remainingNet > 0;
 
@@ -362,6 +396,18 @@ export function FinancePanel({
         }
       />
       <CardBody className="flex flex-col gap-4">
+        <PanelSteps
+          steps={[
+            { key: "invoice", label: "Invoice" },
+            { key: "match", label: "Match" },
+            { key: "approve", label: "Approve" },
+            { key: "pay", label: "Pay" },
+          ]}
+          current={financeStep}
+          complete={financeStep === "done"}
+          next={financeNext}
+        />
+
         {invoices.length === 0 && (
           <MatchBasisNote basis={matchBasis} currency={currency} />
         )}
