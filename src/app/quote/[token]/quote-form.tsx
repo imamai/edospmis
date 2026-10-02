@@ -1,28 +1,71 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { submitQuotation, declineInvite, type QuoteFormState } from "./actions";
+import { CircleAlert, FileSignature, PenLine } from "lucide-react";
+import { submitBid, declineInvite, type QuoteFormState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { TextArea, TextInput } from "@/components/ui/field";
 import { formatMoney } from "@/lib/utils";
+import { TenderPackForm } from "./tender-pack-form";
+import type { BidPack } from "@/lib/tender-types";
 import type { PRItem } from "@/lib/database.types";
 
 const initial: QuoteFormState = { error: null };
 
+/**
+ * The bidder's whole response: prices, paperwork, signature, one button.
+ *
+ * It used to be two buttons on two components — "Submit quotation" here and
+ * "Sign and submit" on the pack below — and there was no safe order to press
+ * them in. Prices first closed the invitation, so the pack vanished and the
+ * documents could never be sent; documents first signed a hash whose price
+ * section read "no-quotation", so the signature bound no price. The live
+ * system holds one of each mistake.
+ *
+ * The pack is rendered inside this form rather than beside it so there is
+ * physically one submit on the page. Its uploads are their own buttons that
+ * save as they go, which is why they can sit inside a form without being part
+ * of it.
+ */
 export function QuoteForm({
   token,
   items,
   defaultName,
+  pack,
 }: {
   token: string;
   items: PRItem[];
   defaultName: string;
+  /** Null when this tender asks for a price and nothing else. */
+  pack: BidPack | null;
 }) {
   const [state, action, pending] = useActionState(
-    submitQuotation.bind(null, token),
+    submitBid.bind(null, token),
     initial,
   );
   const [prices, setPrices] = useState<string[]>(() => items.map(() => ""));
+  const [signedName, setSignedName] = useState("");
+  const [signedPosition, setSignedPosition] = useState("");
+
+  // What is still owed, by the same rule the database enforces on signing —
+  // mandatory only, because an optional document they chose not to send is
+  // their decision. Shown here so they are told before they press the button
+  // rather than by an error afterwards.
+  const suppliedDocTypes = new Set(
+    (pack?.documents ?? []).map((d) => d.doc_type_id),
+  );
+  const answeredTemplates = new Set(
+    (pack?.template_responses ?? []).map((t) => t.template_id),
+  );
+  const outstanding = (pack?.requirements ?? []).filter(
+    (r) =>
+      r.is_mandatory &&
+      (r.kind === "document"
+        ? !suppliedDocTypes.has(r.doc_type_id)
+        : !answeredTemplates.has(r.template_id!)),
+  );
+
+  const signing = Boolean(pack && pack.requirements.length > 0);
 
   const linePrices = items.map((item, i) => ({
     description: item.description,
@@ -34,6 +77,10 @@ export function QuoteForm({
     () => linePrices.reduce((sum, l) => sum + l.qty * l.unit_price_cents, 0),
     [linePrices],
   );
+
+  const blocked =
+    total <= 0 ||
+    (signing && (outstanding.length > 0 || signedName.trim() === ""));
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -114,6 +161,55 @@ export function QuoteForm({
         hint="Lead time, terms, anything else worth knowing — optional"
       />
 
+      {/* The paperwork, inside the same form as the prices. */}
+      {pack && pack.requirements.length > 0 && (
+        <TenderPackForm token={token} pack={pack} />
+      )}
+
+      {signing && (
+        <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface-sunk p-3">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <PenLine className="h-4 w-4 text-brand" aria-hidden="true" />
+            Sign and submit
+          </p>
+
+          {outstanding.length > 0 ? (
+            <p className="flex items-start gap-1.5 text-xs text-attention">
+              <CircleAlert
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              Still needed before you can submit:{" "}
+              {outstanding.map((r) => r.name).join(", ")}.
+            </p>
+          ) : (
+            <p className="text-xs text-ink-faint">
+              By signing you confirm the documents above, your answers and the
+              prices you have entered are correct and that this offer stands.
+            </p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextInput
+              label="Name of the person signing"
+              name="signed_name"
+              value={signedName}
+              onChange={(e) => setSignedName(e.target.value)}
+              placeholder="e.g. Jane Wanjiru"
+            />
+            <TextInput
+              label="Position"
+              name="signed_position"
+              value={signedPosition}
+              onChange={(e) => setSignedPosition(e.target.value)}
+              placeholder="e.g. Managing Director"
+            />
+          </div>
+        </section>
+      )}
+
+      <input type="hidden" name="signing" value={signing ? "1" : "0"} />
+
       {state.error && (
         <p
           role="alert"
@@ -123,10 +219,27 @@ export function QuoteForm({
         </p>
       )}
 
-      <div>
-        <Button type="submit" busy={pending} disabled={total <= 0}>
-          {pending ? "Submitting" : "Submit quotation"}
+      <div className="flex flex-col gap-1.5">
+        <Button type="submit" busy={pending} disabled={blocked}>
+          {signing && <FileSignature className="mr-1.5 h-4 w-4" />}
+          {pending
+            ? "Submitting"
+            : signing
+              ? "Sign and submit"
+              : "Submit quotation"}
         </Button>
+        {/* Why the button is dead, said next to it. A disabled button with no
+            explanation reads as the page being broken, and this one has three
+            different reasons to be disabled. */}
+        {blocked && (
+          <p className="text-xs text-ink-faint">
+            {total <= 0
+              ? "Enter your prices above."
+              : outstanding.length > 0
+                ? "Attach what is still needed above."
+                : "Type the name of the person signing."}
+          </p>
+        )}
       </div>
     </form>
   );

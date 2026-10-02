@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate } from "@/lib/utils";
 import { QuoteForm, DeclineInviteControl } from "./quote-form";
-import { TenderPackForm } from "./tender-pack-form";
 import { bidPackByToken } from "@/lib/data/tender";
 import type { PRItem } from "@/lib/database.types";
 
@@ -79,16 +78,15 @@ export default async function QuotePage({
         </p>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* Prices first: it is what a supplier came to give, and the pack
-              below is the paperwork that has to come with it. */}
+          {/* Prices, paperwork and signature are one form with one submit.
+              They were two, and a bidder could finish either half and be
+              thanked for a response the buyer could not use. */}
           <QuoteForm
             token={token}
             items={row.items}
             defaultName={row.supplier_display_name ?? ""}
+            pack={pack}
           />
-          {pack && pack.requirements.length > 0 && (
-            <TenderPackForm token={token} pack={pack} />
-          )}
           <DeclineInviteControl token={token} />
         </div>
       )}

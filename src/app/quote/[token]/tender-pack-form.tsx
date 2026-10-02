@@ -2,18 +2,11 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Check,
-  CircleAlert,
-  FileSignature,
-  PenLine,
-  Upload,
-} from "lucide-react";
+import { Check, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextArea, TextInput } from "@/components/ui/field";
 import {
   saveBidTemplate,
-  signBid,
   uploadBidDocument,
   uploadBidTemplateFile,
 } from "./tender-actions";
@@ -24,14 +17,14 @@ import type { BidPack, RfqRequirement } from "@/lib/tender-types";
  *
  * Deliberately one page. A bidder sent three links misses one, and the one
  * they miss is always discovered after the closing date — so the documents,
- * the form of tender and the prices are all here, and one signature at the
- * foot covers all three.
+ * the form of tender and the prices are all here, under one signature.
  *
- * Nothing reaches the buyer until that signature: until then this is a draft
- * the bidder can leave and come back to. The signature is what makes it a
- * bid, and the database refuses it while anything mandatory is missing, so
- * the bidder is told what is outstanding rather than discovering later that
- * their tender was set aside.
+ * Uploads here save as they go, into a draft the bidder can leave and come
+ * back to. Nothing reaches the buyer until the single submit at the foot of
+ * the page, which lives with the prices in `QuoteForm` — it used to live here
+ * as a second button, and a page with two submits had no safe order to press
+ * them in: one way locked the bidder out of their own documents, the other
+ * signed a price that was not yet there.
  */
 export function TenderPackForm({
   token,
@@ -46,24 +39,8 @@ export function TenderPackForm({
     tone: "ok" | "error";
     text: string;
   } | null>(null);
-  const [signedName, setSignedName] = useState("");
-  const [signedPosition, setSignedPosition] = useState("");
-
   const documents = pack.requirements.filter((r) => r.kind === "document");
   const templates = pack.requirements.filter((r) => r.kind === "template");
-
-  const suppliedDocTypes = new Set(pack.documents.map((d) => d.doc_type_id));
-  const answeredTemplates = new Set(
-    pack.template_responses.map((t) => t.template_id),
-  );
-
-  const outstanding = pack.requirements.filter(
-    (r) =>
-      r.is_mandatory &&
-      (r.kind === "document"
-        ? !suppliedDocTypes.has(r.doc_type_id)
-        : !answeredTemplates.has(r.template_id!)),
-  );
 
   function run(fn: () => Promise<{ error: string | null; ok: string | null }>) {
     setNotice(null);
@@ -87,8 +64,8 @@ export function TenderPackForm({
           What you need to return
         </h2>
         <p className="mt-0.5 text-xs text-ink-faint">
-          Nothing is sent until you sign at the foot of this page. You can come
-          back to this link and finish later.
+          These save as you go. Nothing is sent until you sign and submit at the
+          foot of this page, so you can come back to this link and finish later.
         </p>
       </div>
 
@@ -130,59 +107,6 @@ export function TenderPackForm({
           onRun={run}
         />
       ))}
-
-      <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface-sunk p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <PenLine className="h-4 w-4 text-brand" aria-hidden="true" />
-          Sign and submit
-        </p>
-
-        {outstanding.length > 0 ? (
-          <p className="flex items-start gap-1.5 text-xs text-attention">
-            <CircleAlert
-              className="mt-0.5 h-3.5 w-3.5 shrink-0"
-              aria-hidden="true"
-            />
-            Still needed: {outstanding.map((r) => r.name).join(", ")}.
-          </p>
-        ) : (
-          <p className="text-xs text-ink-faint">
-            By signing you confirm the documents above, your answers and the
-            prices you have entered are correct and that this offer stands.
-          </p>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TextInput
-            label="Name of the person signing"
-            name="signed_name"
-            value={signedName}
-            onChange={(e) => setSignedName(e.target.value)}
-            placeholder="e.g. Jane Wanjiru"
-          />
-          <TextInput
-            label="Position"
-            name="signed_position"
-            value={signedPosition}
-            onChange={(e) => setSignedPosition(e.target.value)}
-            placeholder="e.g. Managing Director"
-          />
-        </div>
-
-        <div>
-          <Button
-            type="button"
-            busy={pending}
-            disabled={outstanding.length > 0 || signedName.trim() === ""}
-            onClick={() =>
-              run(() => signBid(token, signedName, signedPosition))
-            }
-          >
-            <FileSignature className="mr-1.5 h-4 w-4" />
-            Sign and submit
-          </Button>
-        </div>
-      </section>
 
       {notice && (
         <p
