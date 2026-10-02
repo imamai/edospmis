@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, Check } from "lucide-react";
 import { markNotificationsRead } from "@/app/app/notification-actions";
+import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/utils";
 import type { InboxItem } from "@/lib/notify/notifications";
 
@@ -21,13 +22,72 @@ import type { InboxItem } from "@/lib/notify/notifications";
  * alternative is a per-item tick nobody presses, and a count that only ever
  * goes up.
  */
-export function NotificationBell({ items }: { items: InboxItem[] }) {
+export function NotificationBell({
+  items,
+  userId,
+}: {
+  items: InboxItem[];
+  /** Whose notifications to listen for. Also what the server filters on. */
+  userId: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [, start] = useTransition();
   const panelRef = useRef<HTMLDivElement>(null);
 
   const unread = items.filter((i) => !i.read_at);
+
+  /**
+   * Arrives on its own, rather than at the next page load.
+   *
+   * The bell is rendered by the server layout, so its contents were fixed when
+   * the page loaded: an approval raised while somebody sat reading a case
+   * showed up only when they next navigated. The people who most need telling
+   * are exactly the ones who leave a page open.
+   *
+   * Pushed, not polled. Realtime applies this table's own row policy — mine
+   * only — to each subscriber, so the socket can carry nothing this person
+   * could not already read, and there is no query per user per tick finding
+   * nothing. `router.refresh()` re-runs the server component rather than
+   * patching a second copy of the list in the client: one source of truth for
+   * what is waiting, and resolved items disappear by the same rule as always.
+   */
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`edospmis-notifications-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "edospmis_notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => router.refresh(),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, router]);
+
+  /**
+   * A socket does not survive a sleeping laptop. Coming back to the tab is
+   * the one moment somebody is certain to look at the bell, and a refresh
+   * there costs one request against however long the machine was away.
+   */
+  useEffect(() => {
+    function onFocus() {
+      if (document.visibilityState === "visible") router.refresh();
+    }
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [router]);
 
   // Click outside and Escape both close it. A panel that can only be closed by
   // the button that opened it is a trap on a phone.

@@ -29,6 +29,7 @@ import { ReceivingPanel } from "./receiving-panel";
 import { DeliveryPanel } from "./delivery-panel";
 import { FinancePanel } from "./finance-panel";
 import { StageTimingCard } from "./stage-timing-card";
+import { ScrollToPanel } from "./scroll-to-panel";
 import { HoldBlockedControls } from "./hold-blocked-controls";
 import { AttachmentsPanel } from "./attachments-panel";
 import { PanelSteps } from "./panel-steps";
@@ -284,11 +285,13 @@ export default async function CaseDetailPage({
       </Card>
 
       {canDecide && pendingApproval && (
-        <ApprovalPanel
-          approvalId={pendingApproval.id}
-          caseId={c.id}
-          roleName={pendingApproval.role_name}
-        />
+        <div id="panel-approval" className="scroll-mt-20">
+          <ApprovalPanel
+            approvalId={pendingApproval.id}
+            caseId={c.id}
+            roleName={pendingApproval.role_name}
+          />
+        </div>
       )}
 
       <AttachmentsPanel
@@ -543,72 +546,81 @@ export default async function CaseDetailPage({
       )}
 
       {procurementDetail && (
-        <ProcurementPanel
-          detail={procurementDetail}
-          suppliers={suppliers}
-          canInvite={can(session, "procurement.rfq.send")}
-          canAward={can(session, "procurement.po.issue")}
-          canApprovePO={can(session, "procurement.po.approve")}
-          emphasize={isCurrentStage(
-            PANEL_STAGE_KEYS.procurement,
-            c.current_stage_key,
-          )}
-          docTypes={docTypes}
-          templates={templates}
-          requirements={requirements}
-          requirementsLocked={bids.length > 0}
-          bids={bids}
-        />
+        <div id="panel-procurement" className="scroll-mt-20">
+          <ProcurementPanel
+            detail={procurementDetail}
+            suppliers={suppliers}
+            canInvite={can(session, "procurement.rfq.send")}
+            canAward={can(session, "procurement.po.issue")}
+            canApprovePO={can(session, "procurement.po.approve")}
+            emphasize={isCurrentStage(
+              PANEL_STAGE_KEYS.procurement,
+              c.current_stage_key,
+            )}
+            docTypes={docTypes}
+            templates={templates}
+            requirements={requirements}
+            requirementsLocked={bids.length > 0}
+            bids={bids}
+          />
+        </div>
       )}
 
       {poIssued && fulfilmentDetail && (
-        <ReceivingPanel
-          caseId={c.id}
-          poItems={procurementDetail!.po!.items}
-          poNumber={procurementDetail!.po!.po_number}
-          detail={fulfilmentDetail}
-          caseStatus={c.status}
-          canRecord={can(session, "receiving.grn.create")}
-          canInspect={can(session, "receiving.grn.approve")}
-          emphasize={isCurrentStage(
-            PANEL_STAGE_KEYS.receiving,
-            c.current_stage_key,
-          )}
-        />
+        <div id="panel-receiving" className="scroll-mt-20">
+          <ReceivingPanel
+            caseId={c.id}
+            poItems={procurementDetail!.po!.items}
+            poNumber={procurementDetail!.po!.po_number}
+            detail={fulfilmentDetail}
+            caseStatus={c.status}
+            canRecord={can(session, "receiving.grn.create")}
+            canInspect={can(session, "receiving.grn.approve")}
+            emphasize={isCurrentStage(
+              PANEL_STAGE_KEYS.receiving,
+              c.current_stage_key,
+            )}
+          />
+        </div>
       )}
 
       {poIssued && financeDetail && (
-        <FinancePanel
-          caseId={c.id}
-          poItems={procurementDetail!.po!.items}
-          currency={procurementDetail!.po!.currency}
-          detail={financeDetail}
-          canSubmit={can(session, "finance.invoice.create")}
-          canApprove={can(session, "finance.invoice.approve")}
-          canRecordPayment={can(session, "finance.payment.approve")}
-          vatEnabled={session.tenant.vat_enabled}
-          vatRate={Number(session.tenant.vat_rate)}
-          // What an invoice here will be matched against — the same PO and
-          // GRNs the panels above it show. Passed down rather than re-queried:
-          // both are already loaded for this page.
-          matchBasis={{
-            poNumber: procurementDetail!.po!.po_number,
-            poTotalCents: procurementDetail!.po!.total_cents,
-            orderedQty: procurementDetail!.po!.items.reduce(
-              (sum, i) => sum + i.qty,
-              0,
-            ),
-            receivedQty: (fulfilmentDetail?.grns ?? []).reduce(
-              (sum, g) => sum + g.items.reduce((s, i) => s + i.received_qty, 0),
-              0,
-            ),
-            grnNumbers: (fulfilmentDetail?.grns ?? []).map((g) => g.grn_number),
-          }}
-          emphasize={isCurrentStage(
-            PANEL_STAGE_KEYS.finance,
-            c.current_stage_key,
-          )}
-        />
+        <div id="panel-finance" className="scroll-mt-20">
+          <FinancePanel
+            caseId={c.id}
+            poItems={procurementDetail!.po!.items}
+            currency={procurementDetail!.po!.currency}
+            detail={financeDetail}
+            canSubmit={can(session, "finance.invoice.create")}
+            canApprove={can(session, "finance.invoice.approve")}
+            canRecordPayment={can(session, "finance.payment.approve")}
+            vatEnabled={session.tenant.vat_enabled}
+            vatRate={Number(session.tenant.vat_rate)}
+            // What an invoice here will be matched against — the same PO and
+            // GRNs the panels above it show. Passed down rather than re-queried:
+            // both are already loaded for this page.
+            matchBasis={{
+              poNumber: procurementDetail!.po!.po_number,
+              poTotalCents: procurementDetail!.po!.total_cents,
+              orderedQty: procurementDetail!.po!.items.reduce(
+                (sum, i) => sum + i.qty,
+                0,
+              ),
+              receivedQty: (fulfilmentDetail?.grns ?? []).reduce(
+                (sum, g) =>
+                  sum + g.items.reduce((s, i) => s + i.received_qty, 0),
+                0,
+              ),
+              grnNumbers: (fulfilmentDetail?.grns ?? []).map(
+                (g) => g.grn_number,
+              ),
+            }}
+            emphasize={isCurrentStage(
+              PANEL_STAGE_KEYS.finance,
+              c.current_stage_key,
+            )}
+          />
+        </div>
       )}
 
       {/* Shown for every case with an issued purchase order.
@@ -626,20 +638,25 @@ export default async function CaseDetailPage({
           closes at payment. What has gone is the system deciding, on the
           basis of a client field, that the question does not apply. */}
       {poIssued && fulfilmentDetail && (
-        <DeliveryPanel
-          caseId={c.id}
-          delivery={fulfilmentDetail.delivery}
-          canAssign={can(session, "delivery.assign")}
-          canDispatch={can(session, "delivery.dispatch")}
-          canComplete={can(session, "delivery.complete")}
-          emphasize={isCurrentStage(
-            PANEL_STAGE_KEYS.delivery,
-            c.current_stage_key,
-          )}
-        />
+        <div id="panel-delivery" className="scroll-mt-20">
+          <DeliveryPanel
+            caseId={c.id}
+            delivery={fulfilmentDetail.delivery}
+            canAssign={can(session, "delivery.assign")}
+            canDispatch={can(session, "delivery.dispatch")}
+            canComplete={can(session, "delivery.complete")}
+            emphasize={isCurrentStage(
+              PANEL_STAGE_KEYS.delivery,
+              c.current_stage_key,
+            )}
+          />
+        </div>
       )}
 
       <StageTimingCard durations={stageDurations} />
+      {/* Carries a notification to the panel it is about, rather than to the
+          top of a page with six of them. */}
+      <ScrollToPanel />
 
       {currentStageSla && currentStageSla.status !== "none" && (
         <p

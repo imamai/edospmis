@@ -78,7 +78,7 @@ export default async function AppLayout({
             the workspace and the navigation, and a second row repeating them
             would cost vertical space on a phone for nothing. */}
         <div className="flex items-center justify-end border-b border-line px-4 py-1.5 sm:px-6">
-          <NotificationBell items={inbox} />
+          <NotificationBell items={inbox} userId={session.user.id} />
         </div>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>

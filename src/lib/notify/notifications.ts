@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/notify/email";
+import { withPanelAnchor } from "@/lib/notify/panel-anchors";
 import { shellEmail } from "@/lib/notify/auth-email";
 
 /**
@@ -67,7 +68,7 @@ export async function notifyRole(input: NotifyInput): Promise<void> {
       p_kind: input.kind,
       p_title: input.title,
       p_body: input.body ?? null,
-      p_href: input.href,
+      p_href: withPanelAnchor(input.href, input.kind),
       p_permission: input.permission,
     });
     if (error) throw new Error(error.message);
@@ -91,7 +92,7 @@ export async function notifyRole(input: NotifyInput): Promise<void> {
               heading: input.title,
               body: input.body ?? "This is waiting on you.",
               cta: "Open it",
-              link: `${base}${input.href}`,
+              link: `${base}${withPanelAnchor(input.href, input.kind)}`,
               footer: input.tenantName,
             }),
           }),
@@ -130,7 +131,7 @@ export async function notifyUser(input: {
       p_kind: input.kind,
       p_title: input.title,
       p_body: input.body ?? null,
-      p_href: input.href,
+      p_href: withPanelAnchor(input.href, input.kind),
     });
     if (error) throw new Error(error.message);
   } catch (cause) {
