@@ -536,22 +536,32 @@ export default async function CaseDetailPage({
         />
       )}
 
-      {/* Delivery is outbound (this tenant -> its own client) — irrelevant
-          to a purely internal requisition, so it only shows up once a case
-          actually has a client attached. */}
-      {clientName && poIssued && fulfilmentDetail && (
-        <DeliveryPanel
-          caseId={c.id}
-          delivery={fulfilmentDetail.delivery}
-          canAssign={can(session, "delivery.assign")}
-          canDispatch={can(session, "delivery.dispatch")}
-          canComplete={can(session, "delivery.complete")}
-          emphasize={isCurrentStage(
-            PANEL_STAGE_KEYS.delivery,
-            c.current_stage_key,
-          )}
-        />
-      )}
+      {/* Delivery is outbound (this tenant -> its own client), so it is
+          offered once a case has a client attached — a purely internal
+          requisition ends at receiving and has nothing to deliver.
+
+          But an existing delivery is always shown, client or not. Gating the
+          panel on the client alone hid it from any case that had one: a
+          dispatched delivery with no client left the case sitting in the
+          delivery stage with no way to confirm it and nothing on screen
+          explaining why. PR-2026-000007 in the demo tenant is exactly that.
+          A client decides whether delivery is offered; it cannot decide
+          whether a delivery already under way is visible. */}
+      {(clientName || fulfilmentDetail?.delivery) &&
+        poIssued &&
+        fulfilmentDetail && (
+          <DeliveryPanel
+            caseId={c.id}
+            delivery={fulfilmentDetail.delivery}
+            canAssign={can(session, "delivery.assign")}
+            canDispatch={can(session, "delivery.dispatch")}
+            canComplete={can(session, "delivery.complete")}
+            emphasize={isCurrentStage(
+              PANEL_STAGE_KEYS.delivery,
+              c.current_stage_key,
+            )}
+          />
+        )}
 
       <StageTimingCard durations={stageDurations} />
 
