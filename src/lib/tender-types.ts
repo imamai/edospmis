@@ -64,6 +64,16 @@ export interface BidPack {
   expired: boolean;
   invite_status: "invited" | "viewed" | "submitted" | "declined";
   submission_id: string | null;
+  /**
+   * Set when this draft exists because the buyer sent a signed bid back.
+   * Names what may be replaced; everything else is carried over and locked,
+   * and the price is never reopened.
+   */
+  correction: {
+    reason: string;
+    doc_type_ids: string[];
+    template_ids: string[];
+  } | null;
   requirements: RfqRequirement[];
   documents: {
     id: string;

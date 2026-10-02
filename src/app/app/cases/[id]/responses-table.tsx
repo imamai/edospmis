@@ -48,11 +48,14 @@ export function ResponsesTable({
   canAward,
   onView,
   onAward,
+  onReturn,
 }: {
   rows: ResponseRow[];
   canAward: boolean;
   onView: (quotationId: string) => void;
   onAward: (quotationId: string) => void;
+  /** Hands a signed bid back for named documents. Absent when not permitted. */
+  onReturn?: (submissionId: string, supplierName: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -256,16 +259,34 @@ export function ResponsesTable({
                   </td>
 
                   <td className="px-3 py-2.5 text-right align-top">
-                    {row.quotationId && (
+                    {/* A signed bid with no price still needs returning —
+                        the live system has two of them. */}
+                    {(row.quotationId || row.bid?.submitted) && (
                       <div className="flex justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onView(row.quotationId!)}
-                        >
-                          View
-                        </Button>
-                        {canAward && (
+                        {row.quotationId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onView(row.quotationId!)}
+                          >
+                            View
+                          </Button>
+                        )}
+                        {/* Beside Award, not hidden behind it: the moment you
+                            decide a bid is deficient is the moment you are
+                            looking at whether to award it. */}
+                        {onReturn && row.bid?.submitted && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              onReturn(row.bid!.submission_id, row.name)
+                            }
+                          >
+                            Return
+                          </Button>
+                        )}
+                        {canAward && row.quotationId && (
                           <Button
                             size="sm"
                             variant="secondary"

@@ -35,6 +35,7 @@ import {
   RecordQuotationsForm,
   type QuoteCandidate,
 } from "./record-quotations-form";
+import { ReturnBidForm } from "./return-bid-form";
 import { PanelSteps, NextHere, activeBox } from "./panel-steps";
 import type { BidReview } from "@/lib/data/tender";
 import type {
@@ -299,6 +300,11 @@ export function ProcurementPanel({
 
   const [recordingQuote, setRecordingQuote] = useState(false);
   const [quoteMsg, setQuoteMsg] = useState<string | null>(null);
+  const [returning, setReturning] = useState<{
+    submissionId: string;
+    supplierName: string;
+  } | null>(null);
+  const [returnMsg, setReturnMsg] = useState<string | null>(null);
 
   /**
    * Everyone invited, with what they have quoted so far.
@@ -853,7 +859,16 @@ export function ProcurementPanel({
               canAward={canAward}
               onView={(id) => setViewingId(id)}
               onAward={(id) => setAwardingId(id)}
+              onReturn={
+                canAward
+                  ? (submissionId, supplierName) =>
+                      setReturning({ submissionId, supplierName })
+                  : undefined
+              }
             />
+            {returnMsg && (
+              <p className="mt-1 text-xs text-ink-faint">{returnMsg}</p>
+            )}
             {awardError && (
               <p className="mt-1 text-xs text-critical">{awardError}</p>
             )}
@@ -1088,6 +1103,28 @@ export function ProcurementPanel({
                 busy={bulkPending}
               />
             </form>
+          </Modal>
+        )}
+        {returning && (
+          <Modal
+            open
+            onClose={() => setReturning(null)}
+            title={`Return ${returning.supplierName}'s bid`}
+            description="They can replace what you tick, and nothing else."
+            size="lg"
+          >
+            <ReturnBidForm
+              caseId={rfq.case_id}
+              submissionId={returning.submissionId}
+              supplierName={returning.supplierName}
+              requirements={requirements}
+              onCancel={() => setReturning(null)}
+              onDone={(message) => {
+                setReturning(null);
+                setReturnMsg(message);
+                router.refresh();
+              }}
+            />
           </Modal>
         )}
       </CardBody>

@@ -42,6 +42,24 @@ export function TenderPackForm({
   const documents = pack.requirements.filter((r) => r.kind === "document");
   const templates = pack.requirements.filter((r) => r.kind === "template");
 
+  /**
+   * During a correction only the named items may be touched.
+   *
+   * Everything else was accepted and has been carried over; offering an Upload
+   * button beside it would invite a bidder to revise what nobody questioned,
+   * which is the whole thing a scoped return exists to prevent.
+   */
+  const correction = pack.correction;
+  function replaceable(r: {
+    doc_type_id: string | null;
+    template_id: string | null;
+  }) {
+    if (!correction) return true;
+    if (r.doc_type_id) return correction.doc_type_ids.includes(r.doc_type_id);
+    if (r.template_id) return correction.template_ids.includes(r.template_id);
+    return false;
+  }
+
   function run(fn: () => Promise<{ error: string | null; ok: string | null }>) {
     setNotice(null);
     start(async () => {
@@ -59,9 +77,24 @@ export function TenderPackForm({
 
   return (
     <div className="flex flex-col gap-5">
+      {correction && (
+        <div className="flex flex-col gap-1 rounded-lg border border-attention/25 bg-attention-soft px-3 py-2.5">
+          <p className="text-sm font-semibold text-attention">
+            Sent back for correction
+          </p>
+          <p className="text-xs whitespace-pre-wrap text-attention">
+            {correction.reason}
+          </p>
+          <p className="mt-0.5 text-xs text-attention">
+            Replace only what is marked below. Everything else you sent is still
+            on file, and your price stands as submitted.
+          </p>
+        </div>
+      )}
+
       <div>
         <h2 className="text-sm font-semibold text-ink">
-          What you need to return
+          {correction ? "What to replace" : "What you need to return"}
         </h2>
         <p className="mt-0.5 text-xs text-ink-faint">
           These save as you go. Nothing is sent until you sign and submit at the
@@ -79,6 +112,7 @@ export function TenderPackForm({
               <DocumentRow
                 key={req.requirement_id}
                 req={req}
+                locked={!replaceable(req)}
                 supplied={
                   pack.documents.find(
                     (d) => d.doc_type_id === req.doc_type_id,
@@ -97,6 +131,7 @@ export function TenderPackForm({
         <TemplateSection
           key={req.requirement_id}
           req={req}
+          locked={!replaceable(req)}
           token={token}
           answered={
             pack.template_responses.find(
@@ -129,12 +164,15 @@ function DocumentRow({
   supplied,
   token,
   disabled,
+  locked,
   onRun,
 }: {
   req: RfqRequirement;
   supplied: BidPack["documents"][number] | null;
   token: string;
   disabled: boolean;
+  /** Carried over from the bid that was returned — accepted, not up for change. */
+  locked: boolean;
   onRun: (
     fn: () => Promise<{ error: string | null; ok: string | null }>,
   ) => void;
@@ -179,15 +217,21 @@ function DocumentRow({
           e.target.value = "";
         }}
       />
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={disabled}
-        onClick={() => inputRef.current?.click()}
-      >
-        <Upload className="mr-1.5 h-4 w-4" />
-        {supplied ? "Replace" : "Upload"}
-      </Button>
+      {locked ? (
+        <span className="shrink-0 text-xs text-ink-faint">
+          Already accepted
+        </span>
+      ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Upload className="mr-1.5 h-4 w-4" />
+          {supplied ? "Replace" : "Upload"}
+        </Button>
+      )}
     </li>
   );
 }
@@ -197,12 +241,14 @@ function TemplateSection({
   token,
   answered,
   disabled,
+  locked,
   onRun,
 }: {
   req: RfqRequirement;
   token: string;
   answered: BidPack["template_responses"][number] | null;
   disabled: boolean;
+  locked: boolean;
   onRun: (
     fn: () => Promise<{ error: string | null; ok: string | null }>,
   ) => void;
@@ -247,6 +293,7 @@ function TemplateSection({
                     rows={2}
                     hint={field.help}
                     value={answers[field.key] ?? ""}
+                    readOnly={locked}
                     onChange={(e) =>
                       setAnswers((a) => ({ ...a, [field.key]: e.target.value }))
                     }
@@ -266,6 +313,7 @@ function TemplateSection({
                   }
                   hint={field.help}
                   value={answers[field.key] ?? ""}
+                  readOnly={locked}
                   onChange={(e) =>
                     setAnswers((a) => ({ ...a, [field.key]: e.target.value }))
                   }
@@ -273,18 +321,20 @@ function TemplateSection({
               ),
             )}
           </div>
-          <div>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={disabled}
-              onClick={() =>
-                onRun(() => saveBidTemplate(token, req.template_id!, answers))
-              }
-            >
-              {answered ? "Save changes" : "Save answers"}
-            </Button>
-          </div>
+          {!locked && (
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={disabled}
+                onClick={() =>
+                  onRun(() => saveBidTemplate(token, req.template_id!, answers))
+                }
+              >
+                {answered ? "Save changes" : "Save answers"}
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
@@ -305,17 +355,21 @@ function TemplateSection({
               e.target.value = "";
             }}
           />
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            <Upload className="mr-1.5 h-4 w-4" />
-            {answered
-              ? "Replace the completed copy"
-              : "Upload the completed, signed copy"}
-          </Button>
+          {locked ? (
+            <span className="text-xs text-ink-faint">Already accepted</span>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={disabled}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />
+              {answered
+                ? "Replace the completed copy"
+                : "Upload the completed, signed copy"}
+            </Button>
+          )}
           {answered?.filename && (
             <span className="text-xs text-good">{answered.filename}</span>
           )}

@@ -67,6 +67,16 @@ export function QuoteForm({
 
   const signing = Boolean(pack && pack.requirements.length > 0);
 
+  /**
+   * A correction does not reopen the price.
+   *
+   * The prices table is not rendered at all rather than shown disabled: a
+   * bidder looking at their own figures in a greyed-out box will try to change
+   * them, and the server would refuse a second quotation in a way that reads
+   * as the link being broken. Saying it plainly costs one sentence.
+   */
+  const correcting = Boolean(pack?.correction);
+
   const linePrices = items.map((item, i) => ({
     description: item.description,
     qty: item.qty,
@@ -78,9 +88,10 @@ export function QuoteForm({
     [linePrices],
   );
 
-  const blocked =
-    total <= 0 ||
-    (signing && (outstanding.length > 0 || signedName.trim() === ""));
+  const blocked = correcting
+    ? outstanding.length > 0 || signedName.trim() === ""
+    : total <= 0 ||
+      (signing && (outstanding.length > 0 || signedName.trim() === ""));
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -90,76 +101,85 @@ export function QuoteForm({
         value={JSON.stringify(linePrices)}
       />
 
-      <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-line bg-surface-sunk text-xs uppercase tracking-wide text-ink-faint">
-              <th className="p-2.5 font-medium">Item</th>
-              <th className="p-2.5 font-medium">Qty</th>
-              <th className="p-2.5 font-medium">Unit</th>
-              <th className="p-2.5 font-medium">Your unit price</th>
-              <th className="p-2.5 text-right font-medium">Line total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, i) => (
-              <tr key={i} className="border-b border-line last:border-0">
-                <td className="p-2.5 text-ink">{item.description}</td>
-                <td className="p-2.5 tnum text-ink-soft">{item.qty}</td>
-                <td className="p-2.5 text-ink-soft">{item.unit}</td>
-                <td className="p-2.5">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={prices[i]}
-                    onChange={(e) =>
-                      setPrices((p) =>
-                        p.map((v, idx) => (idx === i ? e.target.value : v)),
-                      )
-                    }
-                    className="h-9 w-28 rounded-md border border-line-strong bg-surface px-2 text-sm tnum focus:border-brand focus:outline-none"
-                  />
-                </td>
-                <td className="p-2.5 text-right tnum text-ink-soft">
-                  {formatMoney(
-                    item.qty * Math.round((Number(prices[i]) || 0) * 100),
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="flex items-center justify-between border-t border-line bg-surface-sunk p-2.5 text-sm">
-          <span className="font-medium text-ink">Total</span>
-          <span className="font-semibold tnum text-ink">
-            {formatMoney(total)}
-          </span>
-        </div>
-      </div>
+      {correcting ? (
+        <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-sm text-ink-soft">
+          Your price stands as you submitted it and is not being re-opened —
+          only the documents below need correcting.
+        </p>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line bg-surface-sunk text-xs uppercase tracking-wide text-ink-faint">
+                  <th className="p-2.5 font-medium">Item</th>
+                  <th className="p-2.5 font-medium">Qty</th>
+                  <th className="p-2.5 font-medium">Unit</th>
+                  <th className="p-2.5 font-medium">Your unit price</th>
+                  <th className="p-2.5 text-right font-medium">Line total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, i) => (
+                  <tr key={i} className="border-b border-line last:border-0">
+                    <td className="p-2.5 text-ink">{item.description}</td>
+                    <td className="p-2.5 tnum text-ink-soft">{item.qty}</td>
+                    <td className="p-2.5 text-ink-soft">{item.unit}</td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={prices[i]}
+                        onChange={(e) =>
+                          setPrices((p) =>
+                            p.map((v, idx) => (idx === i ? e.target.value : v)),
+                          )
+                        }
+                        className="h-9 w-28 rounded-md border border-line-strong bg-surface px-2 text-sm tnum focus:border-brand focus:outline-none"
+                      />
+                    </td>
+                    <td className="p-2.5 text-right tnum text-ink-soft">
+                      {formatMoney(
+                        item.qty * Math.round((Number(prices[i]) || 0) * 100),
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex items-center justify-between border-t border-line bg-surface-sunk p-2.5 text-sm">
+              <span className="font-medium text-ink">Total</span>
+              <span className="font-semibold tnum text-ink">
+                {formatMoney(total)}
+              </span>
+            </div>
+          </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <TextInput
-          label="Company / your name"
-          name="supplier_name"
-          defaultValue={defaultName}
-          required
-        />
-        <TextInput
-          label="Email"
-          name="supplier_email"
-          type="email"
-          hint="So we can reach you"
-        />
-        <TextInput label="Phone" name="supplier_phone" hint="Optional" />
-      </div>
-      <TextArea
-        label="Notes"
-        name="notes"
-        rows={3}
-        hint="Lead time, terms, anything else worth knowing — optional"
-      />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <TextInput
+              label="Company / your name"
+              name="supplier_name"
+              defaultValue={defaultName}
+              required
+            />
+            <TextInput
+              label="Email"
+              name="supplier_email"
+              type="email"
+              hint="So we can reach you"
+            />
+            <TextInput label="Phone" name="supplier_phone" hint="Optional" />
+          </div>
+          <TextArea
+            label="Notes"
+            name="notes"
+            rows={3}
+            hint="Lead time, terms, anything else worth knowing — optional"
+          />
+        </>
+      )}
 
       {/* The paperwork, inside the same form as the prices. */}
       {pack && pack.requirements.length > 0 && (
@@ -224,16 +244,18 @@ export function QuoteForm({
           {signing && <FileSignature className="mr-1.5 h-4 w-4" />}
           {pending
             ? "Submitting"
-            : signing
-              ? "Sign and submit"
-              : "Submit quotation"}
+            : correcting
+              ? "Sign and resubmit"
+              : signing
+                ? "Sign and submit"
+                : "Submit quotation"}
         </Button>
         {/* Why the button is dead, said next to it. A disabled button with no
             explanation reads as the page being broken, and this one has three
             different reasons to be disabled. */}
         {blocked && (
           <p className="text-xs text-ink-faint">
-            {total <= 0
+            {!correcting && total <= 0
               ? "Enter your prices above."
               : outstanding.length > 0
                 ? "Attach what is still needed above."

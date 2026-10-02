@@ -309,3 +309,49 @@ export function shellEmail({
       .join("\n"),
   };
 }
+
+/**
+ * A bid handed back for correction.
+ *
+ * The reason is the body of the message, not a footnote. A supplier told only
+ * that "something needs correcting" will guess, and guess wrong, and the
+ * second attempt comes back as deficient as the first.
+ *
+ * Deliberately does not mention price. A correction never reopens it, and an
+ * email that leaves that ambiguous invites a revised quotation the system will
+ * refuse, which reads to the supplier as the link being broken.
+ */
+export function bidReturnedEmail({
+  link,
+  tenantName,
+  rfqTitle,
+  reason,
+}: {
+  link: string;
+  tenantName: string;
+  rfqTitle: string;
+  reason: string;
+}) {
+  return {
+    subject: `Action needed on your tender: ${rfqTitle} — ${tenantName}`,
+    html: shell({
+      heading: `${tenantName} has sent your tender back`,
+      body: `For <strong>${rfqTitle}</strong>. They have asked you to correct the following:<br /><br /><em>${reason}</em><br /><br />Your price stands as submitted — only the documents they have named need replacing. Everything else you sent is still on file.`,
+      cta: "Open your tender and correct it",
+      link,
+    }),
+    text: [
+      `${tenantName} has sent your tender back for ${rfqTitle}.`,
+      "",
+      "They have asked you to correct the following:",
+      reason,
+      "",
+      "Your price stands as submitted — only the documents they have named need replacing. Everything else you sent is still on file.",
+      "",
+      "Open your tender here:",
+      link,
+      "",
+      `Sent by ${tenantName} via EDOSPMIS.`,
+    ].join("\n"),
+  };
+}

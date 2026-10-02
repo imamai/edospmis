@@ -1,10 +1,13 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireSession, can } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { signedBidDocumentUrl } from "@/lib/data/tender";
+import { sendEmail } from "@/lib/notify/email";
+import { bidReturnedEmail } from "@/lib/notify/auth-email";
 
 export interface RequirementState {
   error: string | null;
@@ -141,4 +144,126 @@ export async function openBidDocument(
   )
     return null;
   return signedBidDocumentUrl(session.tenant.id, documentId);
+}
+
+/**
+ * Sending a bid back to its supplier for correction.
+ *
+ * WHAT THIS IS FOR. An expired CR12, a certificate that did not upload, a form
+ * of tender with a blank where a date should be. Documents are proof of facts
+ * that already existed when the bid was made, so supplying them again changes
+ * nothing about the offer.
+ *
+ * WHAT IT IS NOT FOR. The price. The database carries the original quotation
+ * forward untouched and will not take a second one, because a buyer who can
+ * return a bid and receive a different number is choosing the winner after
+ * seeing the field. If a price is genuinely wrong, that is a rejection or —
+ * before the closing date — the bidder's own withdrawal, not a correction.
+ *
+ * The supplier is emailed. Everything else about this is pointless if the only
+ * notice they get is a page they have no reason to revisit.
+ */
+export async function returnBidForCorrection(
+  caseId: string,
+  submissionId: string,
+  reason: string,
+  docTypeIds: string[],
+  templateIds: string[],
+): Promise<RequirementState> {
+  const session = await requireSession();
+  if (!can(session, "procurement.rfq.evaluate")) {
+    return { error: "You don't have permission to return a bid.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edospmis_return_bid_for_correction", {
+    p_submission_id: submissionId,
+    p_reason: reason,
+    p_doc_type_ids: docTypeIds,
+    p_template_ids: templateIds,
+  });
+  // The function's own messages are written for this screen — "choose at
+  // least one document", "this tender has been awarded" — so they are shown
+  // rather than replaced with something vaguer.
+  if (error) return { error: error.message, ok: null };
+
+  const mailed = await emailBidReturn(
+    submissionId,
+    reason,
+    session.tenant.name,
+  );
+
+  revalidatePath(`/app/cases/${caseId}`);
+  return {
+    error: null,
+    ok: mailed
+      ? "Sent back to the supplier, and they have been emailed."
+      : "Sent back to the supplier. They have no email address on file — send them their link.",
+  };
+}
+
+/**
+ * Telling the supplier their bid is back with them.
+ *
+ * Best-effort, like every other notification in this app: the return has
+ * already happened and committed, and failing to send an email must not
+ * unwind it or show the buyer an error for something that did work.
+ */
+async function emailBidReturn(
+  submissionId: string,
+  reason: string,
+  tenantName: string,
+): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { data: sub } = await supabase
+      .from("edospmis_bid_submissions")
+      .select("rfq_id, supplier_id")
+      .eq("id", submissionId)
+      .maybeSingle();
+    if (!sub) return false;
+
+    const { data: invite } = await supabase
+      .from("edospmis_rfq_suppliers")
+      .select(
+        "access_token, invite_email, edospmis_rfqs(title), edospmis_suppliers(email)",
+      )
+      .eq("rfq_id", sub.rfq_id)
+      .eq("supplier_id", sub.supplier_id)
+      .maybeSingle();
+    if (!invite) return false;
+
+    const one = <T>(v: T | T[] | null | undefined): T | null =>
+      Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+    const supplier = one(
+      invite.edospmis_suppliers as
+        { email: string | null } | { email: string | null }[] | null,
+    );
+    const rfq = one(
+      invite.edospmis_rfqs as { title: string } | { title: string }[] | null,
+    );
+
+    const to = invite.invite_email || supplier?.email;
+    if (!to) return false;
+
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    const base = host
+      ? `${h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https")}://${host}`
+      : (process.env.NEXT_PUBLIC_SITE_URL ?? "");
+
+    const result = await sendEmail({
+      to,
+      ...bidReturnedEmail({
+        link: `${base}/quote/${invite.access_token}`,
+        tenantName,
+        rfqTitle: rfq?.title ?? "a request",
+        reason,
+      }),
+    });
+    return result.ok;
+  } catch (cause) {
+    console.error("EDOSPMIS bid-return email failed:", cause);
+    return false;
+  }
 }
